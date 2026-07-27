@@ -1,7 +1,7 @@
 // FutStar — Design System
 // Dois temas visuais baseados na idade do jogador:
 // KIDS (8-12 anos): claro, vibrante, divertido
-// PRO (13-16 anos): escuro, profissional, premium
+// PRO (13-17 anos): escuro, profissional, premium
 
 export type ThemeMode = 'kids' | 'pro';
 
@@ -99,8 +99,7 @@ export interface Theme {
 }
 
 // ============================================================
-// TEMA PRO (13-16 anos) — Escuro Premium
-// Extraído do treino-bufalo-1.html
+// TEMA PRO (13-17 anos) — Escuro Premium
 // ============================================================
 const PRO_COLORS: ThemeColors = {
   bgPrimary: '#060b14',

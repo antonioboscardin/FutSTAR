@@ -1,5 +1,5 @@
 // FutStar — Tags de categorias de exercícios
-// Extraído diretamente do treino-bufalo-1.html
+// Tags de exercícios para categorização visual
 
 export type TagKey = 'aq' | 'tec' | 'pe' | 'rec' | 'fis' | 'cab' | 'fin' | 'esc' | 'desc';
 
