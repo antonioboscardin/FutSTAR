@@ -39,3 +39,9 @@ export async function cancelTodayStreakAlert(): Promise<void> {
 export async function scheduleAllNotifications(): Promise<void> {
   console.log('[Notificações] Expo Go - ignorado');
 }
+
+export async function sendAchievementNotification(
+  _name: string, _icon: string, _xp: number
+): Promise<void> {
+  console.log('[Notificações] Expo Go - ignorado');
+}

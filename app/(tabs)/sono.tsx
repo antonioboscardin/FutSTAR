@@ -1,15 +1,40 @@
 // FutStar — Aba Sono
-// Protocolo de sono completo: fatos, desmame de celular, rotina noturna
+// Tracking real de sono + conteúdo educacional
+// Registro diário, gráfico semanal, dicas personalizadas
 
+import { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAppContext } from '../../store/progress';
 import { SLEEP_PHASES, SLEEP_ROUTINE, SLEEP_FACTS } from '../../data/sleep';
 import { withOpacity } from '../../constants/theme';
+import { t } from '../../i18n';
+import SleepLogger from '../../components/SleepLogger';
+import SleepChart from '../../components/SleepChart';
+import {
+  getTodaySleep, getWeeklySleep,
+  type SleepRecord, type WeeklySleep,
+} from '../../services/sleep';
 
 export default function SonoScreen() {
   const { theme } = useAppContext();
   const c = theme.colors;
+
+  const [todayRecord, setTodayRecord] = useState<SleepRecord | null>(null);
+  const [weeklySleep, setWeeklySleep] = useState<WeeklySleep | null>(null);
+
+  const loadSleepData = useCallback(async () => {
+    const [today, weekly] = await Promise.all([
+      getTodaySleep(),
+      getWeeklySleep(),
+    ]);
+    setTodayRecord(today);
+    setWeeklySleep(weekly);
+  }, []);
+
+  useEffect(() => {
+    loadSleepData();
+  }, [loadSleepData]);
 
   return (
     <SafeAreaView style={[styles.safe, { backgroundColor: c.bgPrimary }]}>
@@ -18,13 +43,28 @@ export default function SonoScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerEmoji}>🌙</Text>
-            <Text style={[styles.headerTitle, { color: c.textPrimary }]}>Protocolo de Sono</Text>
-            <Text style={[styles.headerSub, { color: c.textSecondary }]}>13-16 anos = 8 a 9 horas por noite</Text>
+            <Text style={[styles.headerTitle, { color: c.textPrimary }]}>{t('sono_title')}</Text>
+            <Text style={[styles.headerSub, { color: c.textSecondary }]}>{t('sono_sub')}</Text>
           </View>
+
+          {/* Sleep Logger — register today's sleep */}
+          <SleepLogger
+            todayRecord={todayRecord}
+            onRecordSaved={loadSleepData}
+          />
+
+          {/* Weekly Chart */}
+          {weeklySleep && weeklySleep.daysLogged > 0 && (
+            <SleepChart
+              records={weeklySleep.records}
+              averageMinutes={weeklySleep.averageMinutes}
+              daysLogged={weeklySleep.daysLogged}
+            />
+          )}
 
           {/* Facts */}
           <View style={[styles.card, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
-            <Text style={[styles.cardTitle, { color: c.accentBlue }]}>🧠 Por que o sono importa pro futebol</Text>
+            <Text style={[styles.cardTitle, { color: c.accentBlue }]}>{t('sono_why')}</Text>
             {SLEEP_FACTS.map((fact, i) => (
               <View key={i} style={[styles.factRow, { borderBottomColor: i < SLEEP_FACTS.length - 1 ? c.borderDefault : 'transparent' }]}>
                 <Text style={[styles.factArrow, { color: c.accentBlue }]}>→</Text>
@@ -34,7 +74,7 @@ export default function SonoScreen() {
           </View>
 
           {/* Gradual phone weaning */}
-          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Desmame Gradual do Celular</Text>
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{t('sono_weaning')}</Text>
           {SLEEP_PHASES.map((sp, i) => (
             <View key={i} style={[styles.sleepPhaseCard, { backgroundColor: c.bgCard, borderColor: withOpacity(sp.color, 0.13), borderLeftColor: sp.color }]}>
               <View style={styles.sleepPhaseRow}>
@@ -49,7 +89,7 @@ export default function SonoScreen() {
           ))}
 
           {/* Night routine */}
-          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Rotina da Noite — Meta Final</Text>
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{t('sono_routine')}</Text>
           <View style={[styles.card, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
             {SLEEP_ROUTINE.map((step, i) => (
               <View key={i} style={[styles.routineRow, { borderBottomColor: i < SLEEP_ROUTINE.length - 1 ? c.borderDefault : 'transparent' }]}>
@@ -63,8 +103,8 @@ export default function SonoScreen() {
           </View>
 
           {/* Important action */}
-          <View style={[styles.importantCard, { borderColor: withOpacity(c.accentRed, 0.13) }]}>
-            <Text style={[styles.importantTitle, { color: c.accentRed }]}>📵 A Ação Mais Importante</Text>
+          <View style={[styles.importantCard, { borderColor: withOpacity(c.accentRed, 0.13), backgroundColor: theme.mode === 'pro' ? '#1a0014' : '#FFF5F5' }]}>
+            <Text style={[styles.importantTitle, { color: c.accentRed }]}>{t('sono_important')}</Text>
             <Text style={[styles.importantText, { color: c.textSecondary }]}>
               Coloca o carregador do celular <Text style={{ color: c.accentPink, fontWeight: '700' }}>fora do quarto</Text>. Se o celular não está no quarto, não tem tentação. Usa despertador de verdade no começo.
             </Text>
@@ -101,7 +141,7 @@ const styles = StyleSheet.create({
   routineInfo: {},
   routineTime: { fontSize: 11, fontWeight: '700' },
   routineAction: { fontSize: 11, marginTop: 2 },
-  importantCard: { borderWidth: 1, borderRadius: 12, padding: 13, backgroundColor: '#1a0014' },
+  importantCard: { borderWidth: 1, borderRadius: 12, padding: 13 },
   importantTitle: { fontSize: 11, fontWeight: '800', marginBottom: 7 },
   importantText: { fontSize: 11, lineHeight: 20 },
 });

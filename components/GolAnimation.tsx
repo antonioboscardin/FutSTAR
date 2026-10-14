@@ -4,15 +4,17 @@
 
 import { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { t } from '../i18n';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 interface GolAnimationProps {
   visible: boolean;
   onComplete: () => void;
+  accentColor?: string;
 }
 
-export default function GolAnimation({ visible, onComplete }: GolAnimationProps) {
+export default function GolAnimation({ visible, onComplete, accentColor = '#00C853' }: GolAnimationProps) {
   const scale = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const bgOpacity = useRef(new Animated.Value(0)).current;
@@ -96,7 +98,7 @@ export default function GolAnimation({ visible, onComplete }: GolAnimationProps)
       >
         <Text style={styles.emoji}>⚽</Text>
         <Text style={styles.golText}>GOL!</Text>
-        <Text style={styles.subText}>Treino concluído!</Text>
+        <Text style={styles.subText}>{t('treinos_training_done')}</Text>
       </Animated.View>
     </View>
   );
@@ -133,9 +135,9 @@ const styles = StyleSheet.create({
   golText: {
     fontSize: 56,
     fontWeight: '900',
-    color: '#00C853',
+    color: '#4ade80',
     letterSpacing: 4,
-    textShadowColor: 'rgba(0, 200, 83, 0.5)',
+    textShadowColor: 'rgba(74, 222, 128, 0.5)',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 20,
   },

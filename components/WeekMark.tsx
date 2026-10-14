@@ -3,7 +3,7 @@
 // - Each training day (SEG, QUI, SAB) gets its own "Treino concluído ✅" button
 // - Rest days show 💤 icon only, no button
 // - Today is highlighted with colored border
-// - Future days are dimmed (opacity 0.5) but still clickable
+// - Future days are dimmed and NOT clickable
 // - Week auto-completes ✅ when all training days are marked
 // - Phase progress bar recalculates based on individual days marked
 
@@ -11,6 +11,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppContext, type TrainingResult } from '../store/progress';
 import { PHASES, TRAINING_DAY_INDICES } from '../data/phases';
 import { withOpacity } from '../constants/theme';
+import { t } from '../i18n';
 
 interface WeekMarkProps {
   phaseIndex: number;
@@ -42,8 +43,8 @@ export default function WeekMark({
   const todayIndex = getTodayDayIndex();
 
   const weeks = [
-    { label: '1ª Semana', weekIndex: 0 },
-    { label: '2ª Semana', weekIndex: 1 },
+    { label: t('treinos_week1'), weekIndex: 0 },
+    { label: t('treinos_week2'), weekIndex: 1 },
   ];
 
   return (
@@ -58,9 +59,11 @@ export default function WeekMark({
               style={[
                 styles.weekHeader,
                 {
-                  backgroundColor: weekComplete ? '#052e16' : c.bgElevated,
+                  backgroundColor: weekComplete
+                    ? withOpacity(c.accentGreen, theme.mode === 'pro' ? 0.08 : 0.06)
+                    : c.bgElevated,
                   borderColor: weekComplete
-                    ? withOpacity('#4ade80', 0.3)
+                    ? withOpacity(c.accentGreen, 0.3)
                     : c.borderDefault,
                 },
               ]}
@@ -68,13 +71,13 @@ export default function WeekMark({
               <Text
                 style={[
                   styles.weekHeaderText,
-                  { color: weekComplete ? '#4ade80' : c.textSecondary },
+                  { color: weekComplete ? c.accentGreen : c.textSecondary },
                 ]}
               >
-                {weekComplete ? `✅ ${week.label} Completa!` : week.label}
+                {weekComplete ? t('treinos_week_complete', { label: week.label }) : week.label}
               </Text>
               {weekComplete && (
-                <Text style={styles.weekBonusText}>+200 XP 🏆</Text>
+                <Text style={[styles.weekBonusText, { color: c.accentYellow }]}>{t('treinos_week_star')}</Text>
               )}
             </View>
 
@@ -94,17 +97,17 @@ export default function WeekMark({
                       styles.dayItem,
                       {
                         backgroundColor: done
-                          ? '#061a0f'
+                          ? withOpacity(c.accentGreen, theme.mode === 'pro' ? 0.06 : 0.04)
                           : isToday
                             ? withOpacity(dayColor, 0.06)
                             : c.bgCard,
                         borderColor: isToday
                           ? dayColor
                           : done
-                            ? withOpacity('#4ade80', 0.2)
+                            ? withOpacity(c.accentGreen, 0.2)
                             : c.borderDefault,
                         borderWidth: isToday ? 2 : 1,
-                        opacity: isFuture && !done ? 0.5 : 1,
+                        opacity: isFuture && !done ? 0.4 : 1,
                       },
                       dayIdx === phase.days.length - 1 && styles.dayItemLast,
                     ]}
@@ -115,7 +118,7 @@ export default function WeekMark({
                       </Text>
                       {isToday && (
                         <View style={[styles.todayBadge, { backgroundColor: withOpacity(dayColor, 0.15) }]}>
-                          <Text style={[styles.todayBadgeText, { color: dayColor }]}>HOJE</Text>
+                          <Text style={[styles.todayBadgeText, { color: dayColor }]}>{t('treinos_today')}</Text>
                         </View>
                       )}
                     </View>
@@ -124,7 +127,7 @@ export default function WeekMark({
                       done ? (
                         <View style={styles.doneRow}>
                           <Text style={styles.doneIcon}>✅</Text>
-                          <Text style={[styles.doneDate, { color: withOpacity('#4ade80', 0.5) }]}>
+                          <Text style={[styles.doneDate, { color: withOpacity(c.accentGreen, 0.5) }]}>
                             {date}
                           </Text>
                           <TouchableOpacity
@@ -132,30 +135,34 @@ export default function WeekMark({
                             activeOpacity={0.5}
                             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                           >
-                            <Text style={[styles.undoText, { color: withOpacity('#4ade80', 0.25) }]}>
-                              desfazer
+                            <Text style={[styles.undoText, { color: withOpacity(c.accentGreen, 0.25) }]}>
+                              {t('treinos_undo')}
                             </Text>
                           </TouchableOpacity>
                         </View>
                       ) : (
-                        <TouchableOpacity
-                          onPress={async () => {
-                            const result = await toggleTraining(phaseIndex, week.weekIndex, dayIdx);
-                            onTrainingComplete?.(result, week.weekIndex);
-                          }}
-                          activeOpacity={0.7}
-                          style={[
-                            styles.completeBtn,
-                            {
-                              backgroundColor: withOpacity(day.color, 0.12),
-                              borderColor: withOpacity(day.color, 0.25),
-                            },
-                          ]}
-                        >
-                          <Text style={[styles.completeBtnText, { color: day.color }]}>
-                            Treino concluído ✅
-                          </Text>
-                        </TouchableOpacity>
+                        isFuture ? (
+                          <Text style={[styles.futureText, { color: c.textDim }]}>—</Text>
+                        ) : (
+                          <TouchableOpacity
+                            onPress={async () => {
+                              const result = await toggleTraining(phaseIndex, week.weekIndex, dayIdx);
+                              onTrainingComplete?.(result, week.weekIndex);
+                            }}
+                            activeOpacity={0.7}
+                            style={[
+                              styles.completeBtn,
+                              {
+                                backgroundColor: withOpacity(day.color, 0.12),
+                                borderColor: withOpacity(day.color, 0.25),
+                              },
+                            ]}
+                          >
+                            <Text style={[styles.completeBtnText, { color: day.color }]}>
+                              {t('treinos_training_done')}
+                            </Text>
+                          </TouchableOpacity>
+                        )
                       )
                     ) : (
                       <View style={styles.restRow}>
@@ -200,7 +207,9 @@ const styles = StyleSheet.create({
   weekBonusText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#fbbf24',
+  },
+  futureText: {
+    fontSize: 11,
   },
   daysGrid: {
     borderWidth: 1,

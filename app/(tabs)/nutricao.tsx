@@ -6,6 +6,7 @@ import { useAppContext } from '../../store/progress';
 import { NUTRITION_BLOCKS, NUTRITION_GOLDEN_RULE } from '../../data/nutrition';
 import { withOpacity } from '../../constants/theme';
 import { LinearGradient } from 'expo-linear-gradient';
+import { t } from '../../i18n';
 
 export default function NutricaoScreen() {
   const { theme } = useAppContext();
@@ -17,8 +18,8 @@ export default function NutricaoScreen() {
         <View style={styles.content}>
           <View style={styles.header}>
             <Text style={styles.headerEmoji}>🥗</Text>
-            <Text style={[styles.headerTitle, { color: c.textPrimary }]}>Nutrição Básica</Text>
-            <Text style={[styles.headerSub, { color: c.textSecondary }]}>Comida simples e acessível — sem complicar</Text>
+            <Text style={[styles.headerTitle, { color: c.textPrimary }]}>{t('nutricao_title')}</Text>
+            <Text style={[styles.headerSub, { color: c.textSecondary }]}>{t('nutricao_sub')}</Text>
           </View>
 
           {NUTRITION_BLOCKS.map((block, i) => (
@@ -33,7 +34,7 @@ export default function NutricaoScreen() {
                 ))}
               </View>
               <View style={[styles.avoidBox, { backgroundColor: theme.mode === 'pro' ? '#1a0a0a' : '#FFF5F5', borderColor: withOpacity(c.accentRed, 0.09) }]}>
-                <Text style={[styles.avoidLabel, { color: c.accentRed }]}>✗ EVITA:</Text>
+                <Text style={[styles.avoidLabel, { color: c.accentRed }]}>{t('nutricao_avoid')}</Text>
                 {block.avoid.map((item, j) => (
                   <Text key={j} style={[styles.avoidText, { color: withOpacity(c.accentRed, 0.7) }]}>• {item}</Text>
                 ))}
@@ -42,7 +43,7 @@ export default function NutricaoScreen() {
           ))}
 
           <LinearGradient colors={c.successGradient} style={[styles.goldenCard, { borderColor: withOpacity(c.accentGreen, 0.13) }]}>
-            <Text style={[styles.goldenTitle, { color: c.accentGreen }]}>🏆 Regra de Ouro</Text>
+            <Text style={[styles.goldenTitle, { color: c.accentGreen }]}>{t('nutricao_golden')}</Text>
             <Text style={[styles.goldenText, { color: withOpacity(c.accentGreen, 0.6) }]}>
               {NUTRITION_GOLDEN_RULE}
             </Text>

@@ -4,7 +4,7 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView,
-  TouchableOpacity, Image, Alert,
+  TouchableOpacity, Image, Alert, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,8 +19,14 @@ import {
   getNotifSettings, saveNotifSettings,
   requestNotifPermission, type NotifSettings,
 } from '../../services/notifications';
-import { markAdsRemoved } from '../../services/ads';
-import { getCurrentLocale, setLanguage, AVAILABLE_LANGUAGES } from '../../i18n';
+import { AVAILABLE_LANGUAGES } from '../../i18n';
+import { t } from '../../i18n';
+import { usePremium } from '../../hooks/usePremium';
+import {
+  getReferralCode,
+  saveReferralCode,
+  checkReferralReward,
+} from '../../services/referral';
 
 export default function PerfilScreen() {
   const {
@@ -28,15 +34,29 @@ export default function PerfilScreen() {
     playerLevel, levelProgress,
     getTotalProgress, unlockedAchievements,
     updateProfileField, resetAllData, logoutProfile,
+    locale, changeLocale,
   } = useAppContext();
   const router = useRouter();
   const c = theme.colors;
   const [switching, setSwitching] = useState(false);
   const [notifSettings, setNotifSettings] = useState<NotifSettings | null>(null);
-  const [currentLang, setCurrentLang] = useState(getCurrentLocale());
+  const { isPremium, toggleDevOverride } = usePremium();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [referralConfirmed, setReferralConfirmed] = useState(0);
 
   useEffect(() => {
     getNotifSettings().then(setNotifSettings);
+    // Load referral data
+    (async () => {
+      let code = await getReferralCode();
+      if (!code && profile?.name) {
+        code = await saveReferralCode(profile.name);
+      }
+      setReferralCode(code);
+      const reward = await checkReferralReward();
+      setReferralConfirmed(reward.confirmed);
+    })();
   }, []);
 
   const handleToggleNotif = async () => {
@@ -45,7 +65,7 @@ export default function PerfilScreen() {
     if (newEnabled) {
       const ok = await requestNotifPermission();
       if (!ok) {
-        Alert.alert('Permissão negada', 'Ativa as notificações nas configurações do celular.');
+        Alert.alert(t('perfil_notif_denied_title'), t('perfil_notif_denied_msg'));
         return;
       }
     }
@@ -91,23 +111,23 @@ export default function PerfilScreen() {
 
   const handleReset = () => {
     Alert.alert(
-      'Resetar tudo?',
-      'Isso apaga TODO o progresso, conquistas e perfil. Não tem volta.',
+      t('perfil_reset_title'),
+      t('perfil_reset_msg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
-        { text: 'Apagar tudo', style: 'destructive', onPress: () => resetAllData() },
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('perfil_reset_confirm'), style: 'destructive', onPress: () => resetAllData() },
       ]
     );
   };
 
   const handleLogout = () => {
     Alert.alert(
-      'Sair da conta?',
-      'Tem certeza? Seu progresso local será mantido.',
+      t('perfil_logout_title'),
+      t('perfil_logout_msg'),
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { text: t('cancel'), style: 'cancel' },
         {
-          text: 'Sair',
+          text: t('perfil_logout_confirm'),
           style: 'destructive',
           onPress: async () => {
             await logoutProfile();
@@ -142,11 +162,21 @@ export default function PerfilScreen() {
             </View>
           </TouchableOpacity>
 
-          <Text style={[styles.heroName, { color: c.textPrimary }]}>{profile?.name || 'Jogador'}</Text>
+          <Text style={[styles.heroName, { color: c.textPrimary }]}>{profile?.name || t('perfil_player')}</Text>
           {pos && (
             <Text style={[styles.heroPos, { color: pos.color }]}>{pos.icon} {pos.label}</Text>
           )}
-          <Text style={[styles.heroAge, { color: c.textDim }]}>{profile?.age} anos · Tema {theme.mode === 'pro' ? 'PRO' : 'KIDS'}</Text>
+          <Text style={[styles.heroAge, { color: c.textDim }]}>{profile?.age} {t('perfil_years', { age: '' }).replace(/ $/, '')} · {t('perfil_theme_label', { mode: theme.mode === 'pro' ? 'PRO' : 'KIDS' })}</Text>
+          {profile?.favoriteTeam ? (
+            <Text style={[styles.heroTeam, { color: c.accentYellow }]}>⚽ {profile.favoriteTeam}</Text>
+          ) : null}
+          <TouchableOpacity
+            onPress={() => router.push('/edit-perfil' as any)}
+            activeOpacity={0.7}
+            style={[styles.editBtn, { borderColor: withOpacity(c.accentGreen, 0.2) }]}
+          >
+            <Text style={[styles.editBtnText, { color: c.accentGreen }]}>✏️ {t('perfil_edit')}</Text>
+          </TouchableOpacity>
         </LinearGradient>
 
         <View style={styles.content}>
@@ -157,7 +187,7 @@ export default function PerfilScreen() {
                 <Text style={[styles.levelIcon, { color: playerLevel.color }]}>{playerLevel.icon}</Text>
                 <View>
                   <Text style={[styles.levelName, { color: playerLevel.color }]}>{playerLevel.name}</Text>
-                  <Text style={[styles.levelLabel, { color: c.textDim }]}>Nível {playerLevel.level}</Text>
+                <Text style={[styles.levelLabel, { color: c.textDim }]}>{t('perfil_level', { level: playerLevel.level })}</Text>
                 </View>
               </View>
               <Text style={[styles.xpText, { color: c.accentYellow }]}>⚡ {xp} XP</Text>
@@ -170,27 +200,27 @@ export default function PerfilScreen() {
             <View style={[styles.statBox, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
               <Text style={styles.statEmoji}>🔥</Text>
               <Text style={[styles.statNum, { color: c.accentOrange }]}>{streak}</Text>
-              <Text style={[styles.statLabel, { color: c.textDim }]}>Streak</Text>
+              <Text style={[styles.statLabel, { color: c.textDim }]}>{t('perfil_streak')}</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
               <Text style={styles.statEmoji}>✅</Text>
               <Text style={[styles.statNum, { color: c.accentGreen }]}>{total.done}</Text>
-              <Text style={[styles.statLabel, { color: c.textDim }]}>Treinos</Text>
+              <Text style={[styles.statLabel, { color: c.textDim }]}>{t('perfil_trainings')}</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
               <Text style={styles.statEmoji}>📊</Text>
               <Text style={[styles.statNum, { color: c.accentBlue }]}>{totalPct}%</Text>
-              <Text style={[styles.statLabel, { color: c.textDim }]}>Completo</Text>
+              <Text style={[styles.statLabel, { color: c.textDim }]}>{t('perfil_complete')}</Text>
             </View>
             <View style={[styles.statBox, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
               <Text style={styles.statEmoji}>🏆</Text>
               <Text style={[styles.statNum, { color: c.accentPink }]}>{unlockedAchievements.length}</Text>
-              <Text style={[styles.statLabel, { color: c.textDim }]}>Badges</Text>
+              <Text style={[styles.statLabel, { color: c.textDim }]}>{t('perfil_badges')}</Text>
             </View>
           </View>
 
           {/* Badges */}
-          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>Conquistas</Text>
+          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>{t('perfil_achievements')}</Text>
           <View style={styles.badgeGrid}>
             {ACHIEVEMENTS.map(ach => {
               const unlocked = unlockedAchievements.includes(ach.key);
@@ -204,18 +234,18 @@ export default function PerfilScreen() {
           </View>
 
           {/* Settings */}
-          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>Configurações</Text>
+          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>{t('perfil_settings')}</Text>
 
           <TouchableOpacity onPress={handleToggleTheme} style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
             <Text style={[styles.settingText, { color: c.textSecondary }]}>
-              {theme.mode === 'pro' ? '⚽ Trocar para tema KIDS' : '🌙 Trocar para tema PRO'}
+              {theme.mode === 'pro' ? t('perfil_theme_to_kids') : t('perfil_theme_to_pro')}
             </Text>
             <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleToggleNotif} style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
             <Text style={[styles.settingText, { color: c.textSecondary }]}>
-              {notifSettings?.enabled ? '🔔 Notificações: ATIVADAS' : '🔕 Notificações: DESATIVADAS'}
+              {notifSettings?.enabled ? t('perfil_notif_on') : t('perfil_notif_off')}
             </Text>
             <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
           </TouchableOpacity>
@@ -223,7 +253,7 @@ export default function PerfilScreen() {
           {notifSettings?.enabled && (
             <TouchableOpacity onPress={handleCycleTime} style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
               <Text style={[styles.settingText, { color: c.textSecondary }]}>
-                ⏰ Lembrete diário: {notifSettings.reminderHour}h
+              ⏰ {t('perfil_daily_reminder', { hour: notifSettings.reminderHour })}
               </Text>
               <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
             </TouchableOpacity>
@@ -233,40 +263,134 @@ export default function PerfilScreen() {
             onPress={() => router.push('/area-pais' as any)}
             style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: withOpacity(c.accentBlue, 0.13) }]}
           >
-            <Text style={[styles.settingText, { color: c.accentBlue }]}>👨‍👩‍👦 Área dos Pais</Text>
+            <Text style={[styles.settingText, { color: c.accentBlue }]}>{t('perfil_parent_area')}</Text>
             <Text style={[styles.settingArrow, { color: c.accentBlue }]}>›</Text>
           </TouchableOpacity>
 
+          {/* Premium button */}
           <TouchableOpacity
             onPress={() => {
-              Alert.alert('Remover anúncios', 'Em breve! Compra in-app será adicionada.', [
-                { text: 'OK' },
-                { text: 'Simular remoção (teste)', onPress: () => markAdsRemoved() },
-              ]);
+              if (isPremium) {
+                router.push('/premium' as any);
+              } else {
+                router.push('/premium' as any);
+              }
             }}
-            style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: withOpacity(c.accentYellow, 0.13) }]}
+            style={[styles.settingRow, {
+              backgroundColor: isPremium
+                ? withOpacity(c.accentPurple, 0.06)
+                : c.bgCard,
+              borderColor: withOpacity(c.accentPurple, 0.2),
+            }]}
           >
-            <Text style={[styles.settingText, { color: c.accentYellow }]}>💎 Remover anúncios</Text>
-            <Text style={[styles.settingArrow, { color: c.accentYellow }]}>›</Text>
+            <Text style={[styles.settingText, { color: c.accentPurple }]}>
+              {isPremium ? '💎 FutStar Premium — ativo' : '💎 FutStar Premium'}
+            </Text>
+            <Text style={[styles.settingArrow, { color: c.accentPurple }]}>›</Text>
           </TouchableOpacity>
+
+          {/* __DEV__ Premium Simulator */}
+          {__DEV__ && (
+            <TouchableOpacity
+              onPress={toggleDevOverride}
+              style={[styles.settingRow, {
+                backgroundColor: isPremium
+                  ? withOpacity(c.accentGreen, 0.06)
+                  : withOpacity(c.accentRed, 0.06),
+                borderColor: isPremium
+                  ? withOpacity(c.accentGreen, 0.2)
+                  : withOpacity(c.accentRed, 0.2),
+              }]}
+            >
+              <Text style={[styles.settingText, { color: isPremium ? c.accentGreen : c.accentRed }]}>
+                {isPremium ? '🧪 Premium: ON (DEV)' : '🧪 Premium: OFF (DEV)'}
+              </Text>
+              <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
+            </TouchableOpacity>
+          )}
 
           <TouchableOpacity
             onPress={async () => {
-              const idx = AVAILABLE_LANGUAGES.findIndex(l => l.code === currentLang);
+              const idx = AVAILABLE_LANGUAGES.findIndex(l => l.code === locale);
               const next = AVAILABLE_LANGUAGES[(idx + 1) % AVAILABLE_LANGUAGES.length];
-              await setLanguage(next.code);
-              setCurrentLang(next.code);
+              await changeLocale(next.code);
             }}
             style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}
           >
             <Text style={[styles.settingText, { color: c.textSecondary }]}>
-              🌐 Idioma: {AVAILABLE_LANGUAGES.find(l => l.code === currentLang)?.label || currentLang}
+              {t('perfil_language', { lang: AVAILABLE_LANGUAGES.find(l => l.code === locale)?.label || locale })}
             </Text>
             <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleReset} style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: withOpacity(c.accentRed, 0.13) }]}>
-            <Text style={[styles.settingText, { color: c.accentRed }]}>🗑 Resetar todos os dados</Text>
+            <Text style={[styles.settingText, { color: c.accentRed }]}>{t('perfil_reset')}</Text>
+            <Text style={[styles.settingArrow, { color: c.accentRed }]}>›</Text>
+          </TouchableOpacity>
+
+          {/* Referral */}
+          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>{t('perfil_referral_section')}</Text>
+
+          <TouchableOpacity
+            onPress={() => router.push('/referral' as any)}
+            style={[styles.settingRow, {
+              backgroundColor: withOpacity(c.accentGreen, 0.06),
+              borderColor: withOpacity(c.accentGreen, 0.2),
+            }]}
+          >
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.settingText, { color: c.accentGreen }]}>
+                🎯 {t('perfil_referral_title')}
+              </Text>
+              {referralCode && (
+                <Text style={[{ fontSize: 10, color: c.textDim, marginTop: 2 }]}>
+                  {t('perfil_referral_code', { code: referralCode })} · {referralConfirmed}/5
+                </Text>
+              )}
+            </View>
+            <Text style={[styles.settingArrow, { color: c.accentGreen }]}>›</Text>
+          </TouchableOpacity>
+
+          {/* Support */}
+          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>{t('perfil_support_section')}</Text>
+
+          <TouchableOpacity
+            onPress={() => router.push('/report-bug' as any)}
+            style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}
+          >
+            <Text style={[styles.settingText, { color: c.textSecondary }]}>{t('perfil_report_bug')}</Text>
+            <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
+          </TouchableOpacity>
+
+          {/* Legal */}
+          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>{t('perfil_legal')}</Text>
+
+          <TouchableOpacity
+            onPress={() => router.push('/privacy-policy' as any)}
+            style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}
+          >
+            <Text style={[styles.settingText, { color: c.textSecondary }]}>{t('perfil_privacy_policy')}</Text>
+            <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => router.push('/terms-of-use' as any)}
+            style={[styles.settingRow, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}
+          >
+            <Text style={[styles.settingText, { color: c.textSecondary }]}>{t('perfil_terms_of_use')}</Text>
+            <Text style={[styles.settingArrow, { color: c.textDim }]}>›</Text>
+          </TouchableOpacity>
+
+          {/* Delete Account */}
+          <TouchableOpacity
+            onPress={() => setShowDeleteModal(true)}
+            style={[styles.settingRow, {
+              backgroundColor: withOpacity(c.accentRed, 0.06),
+              borderColor: withOpacity(c.accentRed, 0.2),
+              marginTop: 10,
+            }]}
+          >
+            <Text style={[styles.settingText, { color: c.accentRed }]}>{t('perfil_delete_account')}</Text>
             <Text style={[styles.settingArrow, { color: c.accentRed }]}>›</Text>
           </TouchableOpacity>
 
@@ -277,14 +401,69 @@ export default function PerfilScreen() {
               activeOpacity={0.7}
               style={[styles.logoutBtn, { borderColor: withOpacity(c.accentRed, 0.18) }]}
             >
-              <Text style={[styles.logoutBtnText, { color: c.accentRed }]}>
-                🚪 Sair da conta
+              <Text style={[styles.logoutBtnText, { color: c.accentRed }]}
+              >
+                {t('perfil_logout')}
               </Text>
             </TouchableOpacity>
           </View>
 
           <View style={{ height: 30 }} />
         </View>
+
+        {/* Delete Account Modal */}
+        <Modal
+          visible={showDeleteModal}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowDeleteModal(false)}
+        >
+          <View style={[styles.modalOverlay, { backgroundColor: c.bgOverlay }]}>
+            <View style={[styles.modalContent, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
+              <Text style={styles.modalEmoji}>⚠️</Text>
+              <Text style={[styles.modalTitle, { color: c.accentRed }]}>{t('perfil_delete_title')}</Text>
+              <Text style={[styles.modalBody, { color: c.textSecondary }]}>{t('perfil_delete_msg')}</Text>
+
+              <View style={styles.modalBtnRow}>
+                <TouchableOpacity
+                  onPress={() => setShowDeleteModal(false)}
+                  style={[styles.modalBtn, { backgroundColor: c.bgElevated, borderColor: c.borderDefault }]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modalBtnText, { color: c.textSecondary }]}>{t('cancel')}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={async () => {
+                    // Confirmação extra (2º passo LGPD)
+                    Alert.alert(
+                      '⚠️ Última confirmação',
+                      'Isso apagará TODOS os seus dados permanentemente. Tem certeza?',
+                      [
+                        { text: 'Cancelar', style: 'cancel' },
+                        {
+                          text: 'Sim, apagar tudo',
+                          style: 'destructive',
+                          onPress: async () => {
+                            setShowDeleteModal(false);
+                            // Apaga TODOS os dados do AsyncStorage (LGPD)
+                            const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+                            await AsyncStorage.clear();
+                            await resetAllData();
+                            router.replace('/cadastro' as any);
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  style={[styles.modalBtn, { backgroundColor: c.accentRed }]}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.modalBtnText, { color: '#fff' }]}>{t('perfil_delete_confirm')}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </SafeAreaView>
   );
@@ -298,11 +477,14 @@ const styles = StyleSheet.create({
   avatarImg: { width: 80, height: 80, borderRadius: 40 },
   avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, justifyContent: 'center', alignItems: 'center' },
   avatarEmoji: { fontSize: 32 },
-  cameraBadge: { position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#060b14' },
+  cameraBadge: { position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: 13, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#06100a' },
   cameraBadgeText: { fontSize: 12 },
   heroName: { fontSize: 20, fontWeight: '900' },
   heroPos: { fontSize: 12, fontWeight: '700', marginTop: 3 },
   heroAge: { fontSize: 10, marginTop: 2 },
+  heroTeam: { fontSize: 11, fontWeight: '700', marginTop: 3 },
+  editBtn: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 6, marginTop: 8 },
+  editBtnText: { fontSize: 11, fontWeight: '700' },
   content: { padding: 14 },
   levelCard: { borderWidth: 1, borderRadius: 14, padding: 12, marginBottom: 10, gap: 8 },
   levelRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
@@ -326,4 +508,12 @@ const styles = StyleSheet.create({
   settingArrow: { fontSize: 18 },
   logoutBtn: { borderWidth: 1, borderRadius: 12, padding: 14, alignItems: 'center' },
   logoutBtnText: { fontSize: 13, fontWeight: '700' },
+  modalOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  modalContent: { borderWidth: 1, borderRadius: 20, padding: 24, width: '100%', alignItems: 'center' },
+  modalEmoji: { fontSize: 40, marginBottom: 12 },
+  modalTitle: { fontSize: 18, fontWeight: '900', marginBottom: 8 },
+  modalBody: { fontSize: 13, textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  modalBtnRow: { flexDirection: 'row', gap: 10, width: '100%' },
+  modalBtn: { flex: 1, borderRadius: 12, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: 'transparent' },
+  modalBtnText: { fontSize: 14, fontWeight: '800' },
 });

@@ -28,6 +28,7 @@ import {
   POSITIONS,
   type PositionKey,
 } from '../data/positions';
+import { t } from '../i18n';
 
 const { width } = Dimensions.get('window');
 
@@ -68,9 +69,13 @@ export default function QuizPosicaoScreen() {
     setSaving(true);
 
     try {
+      // Determina trilha baseado na posição
+      const trilha = selectedPosition === 'goleiro' ? 'Goleiro' : 'Todos';
+
       await saveProfile({
         ...profile,
         position: selectedPosition,
+        trilha,
         onboardingDone: true,
       });
       router.replace('/(tabs)/treinos' as any);
@@ -104,7 +109,7 @@ export default function QuizPosicaoScreen() {
           {/* Progress bar */}
           <View style={styles.progressSection}>
             <Text style={[styles.progressLabel, { color: c.textMuted }]}>
-              Pergunta {currentQ + 1} de {QUIZ_QUESTIONS.length}
+              {t('quiz_question_of', { current: currentQ + 1, total: QUIZ_QUESTIONS.length })}
             </Text>
             <View style={[styles.progressTrack, { backgroundColor: c.borderDefault }]}>
               <Animated.View
@@ -187,10 +192,10 @@ export default function QuizPosicaoScreen() {
           {/* Header */}
           <View style={styles.chooseHeader}>
             <Text style={[styles.chooseTitle, { color: c.textPrimary }]}>
-              Escolha sua posição
+              {t('quiz_choose_title')}
             </Text>
             <Text style={[styles.chooseSubtitle, { color: c.textMuted }]}>
-              Toque na posição que mais combina com você
+              {t('quiz_choose_sub')}
             </Text>
           </View>
 
@@ -229,7 +234,7 @@ export default function QuizPosicaoScreen() {
                       {isSuggested && (
                         <View style={[styles.suggestedBadge, { backgroundColor: c.accentGreen + '22' }]}>
                           <Text style={[styles.suggestedBadgeText, { color: c.accentGreen }]}>
-                            Sugerida ✨
+                            {t('quiz_suggested_badge')}
                           </Text>
                         </View>
                       )}
@@ -254,7 +259,7 @@ export default function QuizPosicaoScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.backButtonText, { color: c.textMuted }]}>
-              ← Voltar ao resultado
+              ← {t('pais_back')}
             </Text>
           </TouchableOpacity>
 
@@ -291,7 +296,7 @@ export default function QuizPosicaoScreen() {
               entering={FadeInDown.delay(200).duration(500)}
               style={styles.resultSubLabel}
             >
-              {isOriginalSuggestion ? '🎯 Sua posição ideal é' : '✅ Posição escolhida'}
+              {isOriginalSuggestion ? t('quiz_result_suggested') : t('quiz_result_chosen')}
             </Animated.Text>
 
             {/* Position icon - large */}
@@ -349,7 +354,7 @@ export default function QuizPosicaoScreen() {
           ]}
         >
           <Text style={[styles.playersLabel, { color: c.textMuted }]}>
-            ⭐ Jogadores na mesma posição
+            {t('quiz_famous_players')}
           </Text>
           <View style={styles.playersRow}>
             {position.famousPlayers.map((player, i) => (
@@ -390,7 +395,7 @@ export default function QuizPosicaoScreen() {
               end={{ x: 1, y: 1 }}
             >
               <Text style={styles.confirmText}>
-                {saving ? 'Salvando...' : 'Aceitar e começar! 🚀'}
+                {saving ? t('cadastro_saving') : t('quiz_accept')}
               </Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -405,7 +410,7 @@ export default function QuizPosicaoScreen() {
             ]}
           >
             <Text style={[styles.chooseOtherText, { color: c.textMuted }]}>
-              Escolher outra posição
+              {t('quiz_choose_other')}
             </Text>
           </TouchableOpacity>
         </Animated.View>
@@ -668,7 +673,7 @@ const styles = StyleSheet.create({
   confirmText: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#060b14',
+    color: '#06100a',
     letterSpacing: 0.3,
   },
   chooseOtherButton: {

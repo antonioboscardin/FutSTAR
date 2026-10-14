@@ -20,6 +20,13 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useAppContext } from '../store/progress';
 import type { UserProfile } from '../store/progress';
+import { t } from '../i18n';
+import { ageToAgeGroup } from '../data/workoutsData';
+import {
+  isValidReferralCode,
+  registerReferral,
+  saveReferralCode,
+} from '../services/referral';
 
 const AGES = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
@@ -30,6 +37,7 @@ export default function CadastroScreen() {
   const [name, setName] = useState('');
   const [age, setAge] = useState<number | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [referralCode, setReferralCode] = useState('');
   const [saving, setSaving] = useState(false);
 
   // Determina tema em tempo real conforme seleciona idade
@@ -37,15 +45,15 @@ export default function CadastroScreen() {
   const isPro = age !== null && age >= 13;
 
   // Cores dinâmicas
-  const bgPrimary = isPro ? '#060b14' : isKids ? '#F0F4FF' : '#060b14';
-  const bgCard = isPro ? '#0d1422' : isKids ? '#FFFFFF' : '#0d1422';
-  const bgInput = isPro ? '#111827' : isKids ? '#EEF2FF' : '#111827';
-  const textPrimary = isPro ? '#f1f5f9' : isKids ? '#1E293B' : '#f1f5f9';
-  const textSecondary = isPro ? '#94a3b8' : isKids ? '#475569' : '#94a3b8';
-  const textMuted = isPro ? '#475569' : isKids ? '#94A3B8' : '#475569';
-  const borderColor = isPro ? '#1a2840' : isKids ? '#E2E8F0' : '#1a2840';
-  const accent = isPro ? '#4ade80' : isKids ? '#00C853' : '#4ade80';
-  const accentBg = isPro ? '#052e16' : isKids ? '#E8F5E9' : '#052e16';
+  const bgPrimary = isPro ? '#06100a' : isKids ? '#F0F4FF' : '#06100a';
+  const bgCard = isPro ? '#0d1f17' : isKids ? '#FFFFFF' : '#0d1f17';
+  const bgInput = isPro ? '#142a1c' : isKids ? '#EEF2FF' : '#142a1c';
+  const textPrimary = isPro ? '#f1f5f0' : isKids ? '#1E293B' : '#f1f5f0';
+  const textSecondary = isPro ? '#a0c4b0' : isKids ? '#475569' : '#a0c4b0';
+  const textMuted = isPro ? '#4a7a5a' : isKids ? '#94A3B8' : '#4a7a5a';
+  const borderColor = isPro ? 'rgba(1,135,95,0.2)' : isKids ? '#E2E8F0' : 'rgba(1,135,95,0.2)';
+  const accent = isPro ? '#01875f' : isKids ? '#00C853' : '#01875f';
+  const accentBg = isPro ? '#0b2218' : isKids ? '#E8F5E9' : '#0b2218';
 
   const canSubmit = name.trim().length >= 2 && age !== null;
 
@@ -75,12 +83,24 @@ export default function CadastroScreen() {
         themeOverride: null, // auto por idade
         onboardingDone: false, // será true após quiz
         createdAt: new Date().toISOString(),
+        faixaEtaria: ageToAgeGroup(age!),
+        trilha: 'Todos', // será atualizado se escolher goleiro no quiz
       };
 
       await saveProfile(profile);
+
+      // Generate referral code for this new user
+      await saveReferralCode(name.trim());
+
+      // Register referral if code was entered
+      const trimmedCode = referralCode.trim().toUpperCase();
+      if (trimmedCode && isValidReferralCode(trimmedCode)) {
+        await registerReferral(trimmedCode, name.trim());
+      }
+
       router.replace('/quiz-posicao' as any);
     } catch (e) {
-      Alert.alert('Erro', 'Não foi possível salvar o perfil.');
+      Alert.alert(t('cadastro_error_title'), t('cadastro_error_msg'));
     } finally {
       setSaving(false);
     }
@@ -100,10 +120,10 @@ export default function CadastroScreen() {
         <View style={styles.header}>
           <Text style={styles.headerEmoji}>⚽</Text>
           <Text style={[styles.headerTitle, { color: textPrimary }]}>
-            Crie seu perfil
+            {t('cadastro_title')}
           </Text>
           <Text style={[styles.headerSubtitle, { color: textMuted }]}>
-            Vamos configurar tudo pra você
+            {t('cadastro_sub')}
           </Text>
         </View>
 
@@ -126,14 +146,14 @@ export default function CadastroScreen() {
             </View>
           </View>
           <Text style={[styles.avatarHint, { color: textMuted }]}>
-            Toca pra adicionar foto (opcional)
+            {t('cadastro_photo_hint')}
           </Text>
         </TouchableOpacity>
 
         {/* Nome */}
         <View style={styles.fieldContainer}>
           <Text style={[styles.fieldLabel, { color: textSecondary }]}>
-            ⚡ Nome do jogador
+            ⚡ {t('cadastro_name')}
           </Text>
           <TextInput
             style={[
@@ -144,7 +164,7 @@ export default function CadastroScreen() {
                 borderColor: name.trim().length >= 2 ? accent + '44' : borderColor,
               },
             ]}
-            placeholder="Como te chamam em campo?"
+            placeholder={t('cadastro_name_placeholder')}
             placeholderTextColor={textMuted}
             value={name}
             onChangeText={setName}
@@ -153,14 +173,14 @@ export default function CadastroScreen() {
             autoCorrect={false}
           />
           {name.trim().length > 0 && name.trim().length < 2 && (
-            <Text style={styles.fieldError}>Mínimo 2 letras</Text>
+            <Text style={styles.fieldError}>{t('cadastro_name_min')}</Text>
           )}
         </View>
 
         {/* Idade */}
         <View style={styles.fieldContainer}>
           <Text style={[styles.fieldLabel, { color: textSecondary }]}>
-            🎂 Sua idade
+            🎂 {t('cadastro_age')}
           </Text>
           <View style={styles.ageGrid}>
             {AGES.map((a) => {
@@ -168,7 +188,7 @@ export default function CadastroScreen() {
               const ageIsKids = a <= 12;
               const buttonAccent = ageIsKids
                 ? (selected ? '#00C853' : '#E2E8F0')
-                : (selected ? '#4ade80' : borderColor);
+                : (selected ? '#01875f' : borderColor);
 
               return (
                 <TouchableOpacity
@@ -218,10 +238,44 @@ export default function CadastroScreen() {
               </Text>
               <Text style={[styles.themeIndicatorText, { color: accent }]}>
                 {isKids
-                  ? 'Tema KIDS ativado — cores vibrantes e diversão!'
-                  : 'Tema PRO ativado — visual profissional e sério'}
+                  ? t('cadastro_theme_kids')
+                  : t('cadastro_theme_pro')}
               </Text>
             </View>
+          )}
+        </View>
+
+        {/* Código de indicação (opcional) */}
+        <View style={styles.fieldContainer}>
+          <Text style={[styles.fieldLabel, { color: textSecondary }]}>
+            🎯 {t('cadastro_referral')}
+          </Text>
+          <TextInput
+            style={[
+              styles.textInput,
+              {
+                backgroundColor: bgInput,
+                color: textPrimary,
+                borderColor: referralCode.trim().length > 0
+                  ? (isValidReferralCode(referralCode.trim()) ? accent + '44' : '#EF4444' + '44')
+                  : borderColor,
+              },
+            ]}
+            placeholder={t('cadastro_referral_placeholder')}
+            placeholderTextColor={textMuted}
+            value={referralCode}
+            onChangeText={(text) => setReferralCode(text.toUpperCase())}
+            maxLength={8}
+            autoCapitalize="characters"
+            autoCorrect={false}
+          />
+          {referralCode.trim().length > 0 && !isValidReferralCode(referralCode.trim()) && (
+            <Text style={styles.fieldError}>{t('cadastro_referral_invalid')}</Text>
+          )}
+          {referralCode.trim().length > 0 && isValidReferralCode(referralCode.trim()) && (
+            <Text style={[styles.fieldSuccess, { color: accent }]}>
+              ✅ {t('cadastro_referral_valid')}
+            </Text>
           )}
         </View>
 
@@ -248,10 +302,10 @@ export default function CadastroScreen() {
             <Text
               style={[
                 styles.submitText,
-                { color: canSubmit ? '#060b14' : '#475569' },
+                { color: canSubmit ? '#06100a' : '#4a7a5a' },
               ]}
             >
-              {saving ? 'Salvando...' : 'Criar meu perfil ⚡'}
+              {saving ? t('cadastro_saving') : t('cadastro_submit')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -326,7 +380,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#060b14',
+    borderColor: '#06100a',
   },
   avatarBadgeText: {
     fontSize: 14,
@@ -357,6 +411,12 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginLeft: 4,
   },
+  fieldSuccess: {
+    fontSize: 11,
+    marginTop: 6,
+    marginLeft: 4,
+    fontWeight: '600',
+  },
   ageGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -381,7 +441,7 @@ const styles = StyleSheet.create({
     top: 4,
     right: 6,
     fontSize: 10,
-    color: '#4ade80',
+    color: '#2aff9e',
     fontWeight: '900',
   },
   themeIndicator: {

@@ -6,6 +6,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useAppContext } from '../store/progress';
 import { PHASES } from '../data/phases';
 import { withOpacity } from '../constants/theme';
+import { t } from '../i18n';
 
 interface PhaseSelectorProps {
   selectedPhase: number;
@@ -22,7 +23,7 @@ export default function PhaseSelector({
   return (
     <View>
       <Text style={[styles.sectionLabel, { color: c.textMuted }]}>
-        Fase do Treino
+        {t('treinos_phase_label')}
       </Text>
       <View style={styles.grid}>
         {PHASES.map((phase, i) => {

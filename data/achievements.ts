@@ -7,9 +7,6 @@ export type AchievementKey =
   | 'fase_conquistada'
   | 'ambidestro'
   | 'maquina'
-  | 'futstar'
-  | 'madrugador'
-  | 'nutricao_check'
   | 'streak_3'
   | 'streak_14'
   | 'streak_30'
@@ -112,12 +109,12 @@ export interface PlayerLevel {
 }
 
 export const PLAYER_LEVELS: PlayerLevel[] = [
-  { level: 1, name: 'Iniciante', icon: '🌱', minXP: 0, maxXP: 299, color: '#94a3b8' },
-  { level: 2, name: 'Promessa', icon: '🌟', minXP: 300, maxXP: 799, color: '#4ade80' },
-  { level: 3, name: 'Talento', icon: '⚡', minXP: 800, maxXP: 1799, color: '#60a5fa' },
-  { level: 4, name: 'Craque', icon: '🔥', minXP: 1800, maxXP: 3499, color: '#fb923c' },
+  { level: 1, name: 'Iniciante', icon: '🌱', minXP: 0, maxXP: 299, color: '#4a7a5a' },
+  { level: 2, name: 'Promessa', icon: '🌟', minXP: 300, maxXP: 799, color: '#2aff9e' },
+  { level: 3, name: 'Talento', icon: '⚡', minXP: 800, maxXP: 1799, color: '#38bdf8' },
+  { level: 4, name: 'Craque', icon: '🔥', minXP: 1800, maxXP: 3499, color: '#FF6B35' },
   { level: 5, name: 'Estrela', icon: '💎', minXP: 3500, maxXP: 5999, color: '#a78bfa' },
-  { level: 6, name: 'Lenda', icon: '👑', minXP: 6000, maxXP: Infinity, color: '#fbbf24' },
+  { level: 6, name: 'Lenda', icon: '👑', minXP: 6000, maxXP: Infinity, color: '#FFD700' },
 ];
 
 export const XP_PER_TRAINING = 100;

@@ -3,6 +3,7 @@
 
 import { View, Text, StyleSheet } from 'react-native';
 import { useAppContext } from '../store/progress';
+import { withOpacity } from '../constants/theme';
 
 interface StreakBadgeProps {
   size?: 'sm' | 'md' | 'lg';
@@ -13,9 +14,11 @@ export default function StreakBadge({ size = 'md' }: StreakBadgeProps) {
   const c = theme.colors;
 
   const isActive = streak > 0;
-  const bgColor = isActive ? '#431407' : c.bgCard;
-  const borderCol = isActive ? '#fb923c33' : c.borderDefault;
-  const textColor = isActive ? '#fb923c' : c.textDim;
+  const bgColor = isActive
+    ? withOpacity(c.accentOrange, theme.mode === 'pro' ? 0.12 : 0.08)
+    : c.bgCard;
+  const borderCol = isActive ? withOpacity(c.accentOrange, 0.2) : c.borderDefault;
+  const textColor = isActive ? c.accentOrange : c.textDim;
 
   const sizeConfig = {
     sm: { pad: 6, gap: 3, emoji: 12, text: 10, num: 12 },

@@ -1,714 +1,471 @@
-// FutStar — Aba Treinos (Completa v2)
-// Tela principal do app com:
-// - Header com nome + streak
-// - Card "Treino de Hoje" (mostra treino do dia atual ou descanso)
-// - Mini barra de progresso geral (animada, baseada em dias)
-// - Seletor de fase (4 botões grid)
-// - Objetivo da fase
-// - Seletor de dia (scroll horizontal, hoje destacado)
-// - Card do dia (nome, foco, duração, parceiro)
-// - Sistema de marcação per-day com semana 1 e semana 2
-// - Regras de Ouro
-// - Confetti e Toast ao completar treinos
+// FutStar — Aba Treinos v3 (Banco Unificado)
+// Mostra o treino do dia do jogador com fases expansíveis
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Animated,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAppContext, type TrainingResult } from '../../store/progress';
-import { PHASES, TRAINING_DAY_INDICES } from '../../data/phases';
+import { useRouter } from 'expo-router';
+import { useAppContext } from '../../store/progress';
 import { withOpacity } from '../../constants/theme';
-import PhaseSelector from '../../components/PhaseSelector';
-import DaySelector from '../../components/DaySelector';
-import ExerciseCard from '../../components/ExerciseCard';
-import WeekMark from '../../components/WeekMark';
-import StreakBadge from '../../components/StreakBadge';
+import { getCurrentLocale } from '../../i18n';
+import {
+  type Workout, type WorkoutPhase, type WorkoutExercise,
+  i18nText, getPhaseIcon, getPhaseColor,
+  WORKOUT_LEVELS, LEVEL_ORDER, DAY_LABELS,
+} from '../../data/workoutsData';
 import ProgressBar from '../../components/ProgressBar';
-import Toast, { type ToastData } from '../../components/Toast';
-import ConfettiOverlay from '../../components/ConfettiOverlay';
-import GolAnimation from '../../components/GolAnimation';
+import StreakFlame from '../../components/StreakFlame';
+import AnimatedEntrance from '../../components/AnimatedEntrance';
 
-const GOLDEN_RULES = [
-  '🥤 Hidrata sempre — antes, durante e depois',
-  '🛑 Dor real não é cansaço. Para se doer de verdade',
-  '🦶 Pé esquerdo todo dia — o hábito cria o ambidestro',
-  '✅ Qualidade acima de Quantidade — executa certo',
-  '📺 Assiste Vini Jr., Neymar, Salah — copia os movimentos',
-];
-
-// Map JS Date.getDay() (0=Sun,1=Mon...6=Sat) to our day index (0=SEG...6=DOM)
-function getTodayDayIndex(): number {
-  const jsDay = new Date().getDay();
-  return jsDay === 0 ? 6 : jsDay - 1;
-}
+type Lang = 'pt' | 'es' | 'en';
 
 export default function TreinosScreen() {
   const {
-    theme,
-    profile,
-    getTotalProgress,
-    getPhaseProgress,
+    theme, profile, streak, xp, playerLevel,
+    getCurrentWorkout, completeWorkout, getWorkoutProgress,
+    nivelAtual, semanaAtual, diaAtual, treinosConcluidos,
   } = useAppContext();
   const c = theme.colors;
+  const router = useRouter();
+  const lang = (getCurrentLocale() || 'pt') as Lang;
 
-  const todayIndex = getTodayDayIndex();
-  const [selectedPhase, setSelectedPhase] = useState(0);
-  const [selectedDay, setSelectedDay] = useState(todayIndex);
-  const [expandedExercise, setExpandedExercise] = useState<number | null>(null);
+  const workout = getCurrentWorkout();
+  const progress = getWorkoutProgress();
+  const levelInfo = WORKOUT_LEVELS.find(l => l.key === nivelAtual);
+  const dayLabel = DAY_LABELS[(diaAtual - 1)] || DAY_LABELS[0];
 
-  // Toast state
-  const [toasts, setToasts] = useState<ToastData[]>([]);
-  const toastCounter = useRef(0);
+  const [expandedPhase, setExpandedPhase] = useState<number | null>(0);
+  const [openedPhases, setOpenedPhases] = useState<Set<number>>(new Set([0])); // phase 0 starts expanded
+  const [completing, setCompleting] = useState(false);
+  const isCompleted = workout ? treinosConcluidos.includes(workout.id) : false;
 
-  // Confetti state
-  const [showConfetti, setShowConfetti] = useState(false);
-  const [isPhaseConfetti, setIsPhaseConfetti] = useState(false);
+  const totalPhases = workout ? workout.fases.length : 0;
+  const allPhasesViewed = totalPhases > 0 && openedPhases.size >= totalPhases;
 
-  // GOL animation state (kids only)
-  const [showGol, setShowGol] = useState(false);
-  const isKids = profile ? profile.age <= 12 : false;
-  const pendingResult = useRef<{ result: TrainingResult } | null>(null);
-
-  const phase = PHASES[selectedPhase];
-  const day = phase.days[selectedDay];
-  const totalProgress = getTotalProgress();
-  const phaseProgress = getPhaseProgress(selectedPhase);
-  const phasePct = phaseProgress.total > 0
-    ? Math.round((phaseProgress.done / phaseProgress.total) * 100)
-    : 0;
-
-  // Today's training info
-  const todayDay = phase.days[todayIndex];
-  const isTodayTraining = todayDay?.type === 'treino';
-
-  const handleSelectPhase = useCallback((index: number) => {
-    setSelectedPhase(index);
-    setSelectedDay(todayIndex);
-    setExpandedExercise(null);
-  }, [todayIndex]);
-
-  const handleSelectDay = useCallback((index: number) => {
-    setSelectedDay(index);
-    setExpandedExercise(null);
+  const handleTogglePhase = useCallback((phaseIdx: number) => {
+    setExpandedPhase(prev => prev === phaseIdx ? null : phaseIdx);
+    setOpenedPhases(prev => {
+      if (prev.has(phaseIdx)) return prev;
+      const next = new Set(prev);
+      next.add(phaseIdx);
+      return next;
+    });
   }, []);
 
-  const handleToggleExercise = useCallback((index: number) => {
-    setExpandedExercise(prev => (prev === index ? null : index));
-  }, []);
-
-  const addToast = useCallback((message: string, emoji: string, color: string, type: ToastData['type'] = 'normal', duration?: number) => {
-    const id = `toast_${++toastCounter.current}`;
-    setToasts(prev => [...prev, { id, message, emoji, color, type, duration }]);
-  }, []);
-
-  const dismissToast = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
-
-  const showFeedback = useCallback((result: TrainingResult) => {
-    // Show confetti (for PRO) or after GOL animation (for kids)
-    setIsPhaseConfetti(result.phaseComplete);
-    setShowConfetti(true);
-
-    // Show appropriate toast
-    if (result.phaseComplete) {
-      addToast('FASE COMPLETA! Você evoluiu!', '⭐', '#a78bfa', 'phase', 4000);
-    } else if (result.weekComplete) {
-      addToast(`Semana completa! +200 XP bônus!`, '🏆', '#fbbf24', 'celebration', 3500);
-    } else {
-      addToast(`+${result.xpGained} XP — Continue assim!`, '🔥', '#4ade80', 'normal', 2500);
+  const handleComplete = useCallback(async () => {
+    if (!workout || completing || isCompleted) return;
+    setCompleting(true);
+    try {
+      const result = await completeWorkout(workout.id);
+      // Navega para tela de conclusão
+      router.push({
+        pathname: '/workout-complete' as any,
+        params: {
+          xp: String(result.xpGained),
+          levelUp: String(result.levelUp),
+          workoutTitle: i18nText(workout.titulo, lang),
+        },
+      });
+    } finally {
+      setCompleting(false);
     }
-  }, [addToast]);
+  }, [workout, completing, isCompleted, completeWorkout, router, lang]);
 
-  const handleTrainingComplete = useCallback((result: TrainingResult, weekIndex: number) => {
-    if (!result.marked) return;
-
-    if (isKids) {
-      // Kids: show GOL animation first, then confetti/toast after
-      pendingResult.current = { result };
-      setShowGol(true);
-    } else {
-      // PRO: show confetti + toast directly
-      showFeedback(result);
-    }
-  }, [isKids, showFeedback]);
-
-  const handleGolComplete = useCallback(() => {
-    setShowGol(false);
-    if (pendingResult.current) {
-      showFeedback(pendingResult.current.result);
-      pendingResult.current = null;
-    }
-  }, [showFeedback]);
-
-  const isTrainingDay = day.type === 'treino';
+  // ---- Sem treino disponível ----
+  if (!workout) {
+    return (
+      <SafeAreaView style={[styles.safe, { backgroundColor: c.bgPrimary }]}>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View style={styles.content}>
+            <Text style={[styles.greeting, { color: c.textPrimary }]}>
+              E aí, {profile?.name || 'Jogador'}! 👋
+            </Text>
+            <View style={[styles.emptyCard, { backgroundColor: c.bgCard, borderColor: c.borderDefault }]}>
+              <Text style={styles.emptyEmoji}>🏆</Text>
+              <Text style={[styles.emptyTitle, { color: c.textPrimary }]}>
+                Todos os treinos concluídos!
+              </Text>
+              <Text style={[styles.emptyText, { color: c.textSecondary }]}>
+                Você completou todos os treinos disponíveis neste nível. Parabéns!
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: c.bgPrimary }]}>
-      {/* GOL animation (kids only) */}
-      <GolAnimation visible={showGol} onComplete={handleGolComplete} />
-
-      {/* Confetti overlay */}
-      <ConfettiOverlay
-        visible={showConfetti}
-        isPhaseComplete={isPhaseConfetti}
-        onComplete={() => setShowConfetti(false)}
-      />
-
-      {/* Toast stack */}
-      {toasts.map((toast) => (
-        <Toast key={toast.id} toast={toast} onDismiss={dismissToast} />
-      ))}
-
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ============================================================ */}
-        {/* HEADER */}
-        {/* ============================================================ */}
-        <LinearGradient
-          colors={c.headerGradient}
-          style={styles.header}
-          start={{ x: 0.2, y: 0 }}
-          end={{ x: 0.8, y: 1 }}
-        >
-          {/* Top badge */}
-          <View style={styles.topBadge}>
-            <View
-              style={[
-                styles.badgePill,
-                {
-                  backgroundColor: withOpacity(c.accentGreen, 0.08),
-                  borderColor: withOpacity(c.accentGreen, 0.17),
-                },
-              ]}
-            >
-              <Text style={[styles.badgePillText, { color: c.accentGreen }]}>
-                ⚽ FutStar {theme.mode === 'pro' ? 'PRO' : 'KIDS'}
-              </Text>
-            </View>
-          </View>
-
-          {/* Name + Streak row */}
-          <View style={styles.nameRow}>
-            <View style={styles.nameInfo}>
-              <Text style={[styles.greeting, { color: c.textPrimary }]}>
-                E aí, {profile?.name || 'Jogador'}! 👋
-              </Text>
-              <Text style={[styles.greetingSub, { color: c.textDim }]}>
-                Bora treinar hoje?
-              </Text>
-            </View>
-            <StreakBadge size="sm" />
-          </View>
-        </LinearGradient>
-
+    <SafeAreaView style={[styles.safe, { backgroundColor: c.bgPrimary }]}>
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.content}>
-          {/* ============================================================ */}
-          {/* TREINO DE HOJE CARD */}
-          {/* ============================================================ */}
-          <View
-            style={[
-              styles.todayCard,
-              {
-                backgroundColor: isTodayTraining
-                  ? withOpacity(todayDay.color, 0.06)
-                  : withOpacity('#60a5fa', 0.05),
-                borderColor: isTodayTraining
-                  ? withOpacity(todayDay.color, 0.2)
-                  : withOpacity('#60a5fa', 0.12),
-              },
-            ]}
-          >
-            <View style={styles.todayCardHeader}>
-              <Text style={[styles.todayCardLabel, { color: c.textMuted }]}>
-                TREINO DE HOJE
-              </Text>
-              <Text style={[styles.todayCardDay, { color: c.textDim }]}>
-                {todayDay?.label}
-              </Text>
-            </View>
-            {isTodayTraining ? (
-              <View>
-                <Text style={[styles.todayCardFocus, { color: todayDay.color }]}>
-                  {todayDay.icon} {todayDay.focus}
-                </Text>
-                <Text style={[styles.todayCardDuration, { color: c.textDim }]}>
-                  ⏱ {todayDay.duration}
-                </Text>
-                {selectedDay !== todayIndex && (
-                  <TouchableOpacity
-                    onPress={() => setSelectedDay(todayIndex)}
-                    activeOpacity={0.7}
-                    style={[
-                      styles.goTodayBtn,
-                      {
-                        backgroundColor: withOpacity(todayDay.color, 0.12),
-                        borderColor: withOpacity(todayDay.color, 0.25),
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.goTodayBtnText, { color: todayDay.color }]}>
-                      Iniciar treino de hoje →
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ) : (
-              <View>
-                <Text style={[styles.todayCardFocus, { color: '#60a5fa' }]}>
-                  💤 Dia de Descanso Ativo
-                </Text>
-                <Text style={[styles.todayCardDuration, { color: c.textDim }]}>
-                  Alongue 10 min · Assista jogos e analise movimentos
-                </Text>
-              </View>
-            )}
-          </View>
 
-          {/* ============================================================ */}
-          {/* PROGRESS CARD (baseado em dias, não semanas) */}
-          {/* ============================================================ */}
-          <View
-            style={[
-              styles.progressCard,
-              {
-                backgroundColor: c.bgCard,
-                borderColor: c.borderDefault,
-              },
-            ]}
-          >
-            <View style={styles.progressCardRow}>
-              <View>
-                <Text style={[styles.progressLabel, { color: c.textMuted }]}>
-                  Progresso Geral
+          {/* ---- Header ---- */}
+          <AnimatedEntrance delay={0}>
+            <View style={styles.headerRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.greeting, { color: c.textPrimary }]}>
+                  E aí, {profile?.name || 'Jogador'}! 👋
                 </Text>
-                <View style={styles.progressNumbers}>
-                  <Text style={[styles.progressBig, { color: c.accentGreen }]}>
-                    {totalProgress.done}
+                <Text style={[styles.greetingSub, { color: c.textSecondary }]}>
+                  {i18nText(dayLabel, lang)} · Semana {semanaAtual}
+                </Text>
+              </View>
+              <StreakFlame size="sm" />
+            </View>
+          </AnimatedEntrance>
+
+          {/* ---- Nível + Progresso ---- */}
+          <AnimatedEntrance delay={80}>
+            <View style={[styles.levelCard, {
+              backgroundColor: c.bgCard,
+              borderColor: withOpacity(levelInfo?.color || c.accentGreen, 0.2),
+            }]}>
+              <View style={styles.levelRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.levelLabel, { color: c.textMuted }]}>NÍVEL</Text>
+                  <Text style={[styles.levelName, { color: levelInfo?.color || c.accentGreen }]}>
+                    {i18nText(levelInfo?.label || { pt: nivelAtual, es: nivelAtual, en: nivelAtual }, lang)}
                   </Text>
-                  <Text style={[styles.progressSmall, { color: c.textDim }]}>
-                    {' '}/ {totalProgress.total} treinos feitos
+                </View>
+                <View style={styles.levelStats}>
+                  <Text style={[styles.levelXP, { color: c.accentYellow }]}>⚡ {xp} XP</Text>
+                  <Text style={[styles.levelCount, { color: c.textDim }]}>
+                    {progress.done}/{progress.total} treinos
                   </Text>
                 </View>
               </View>
-              <View style={styles.progressRight}>
-                <Text style={[styles.progressRightLabel, { color: c.textDim }]}>
-                  Esta fase
-                </Text>
-                <Text style={[styles.progressRightValue, { color: phase.color }]}>
-                  {phaseProgress.done} de {phaseProgress.total}
-                </Text>
-              </View>
-            </View>
-            {/* Animated phase progress bar */}
-            <View style={{ marginTop: 8 }}>
               <ProgressBar
-                progress={phasePct}
-                color={phase.color}
+                progress={progress.pct}
+                color={levelInfo?.color || c.accentGreen}
                 height={6}
                 showLabel
               />
             </View>
-          </View>
+          </AnimatedEntrance>
 
-          {/* ============================================================ */}
-          {/* PHASE SELECTOR */}
-          {/* ============================================================ */}
-          <PhaseSelector
-            selectedPhase={selectedPhase}
-            onSelectPhase={handleSelectPhase}
-          />
-
-          {/* Phase objective */}
-          <View
-            style={[
-              styles.objectiveCard,
-              {
-                backgroundColor: withOpacity(phase.color, 0.06),
-                borderColor: withOpacity(phase.color, 0.13),
-              },
-            ]}
-          >
-            <Text style={styles.objectiveText}>
-              <Text style={[styles.objectiveLabel, { color: phase.color }]}>
-                Objetivo:{' '}
+          {/* ---- Treino do Dia ---- */}
+          <AnimatedEntrance delay={160}>
+            <LinearGradient
+              colors={[
+                withOpacity(levelInfo?.color || c.accentGreen, 0.12),
+                withOpacity(c.bgCard, 0.95),
+              ]}
+              style={[styles.workoutCard, { borderColor: withOpacity(levelInfo?.color || c.accentGreen, 0.25) }]}
+            >
+              <Text style={[styles.workoutLabel, { color: c.textMuted }]}>
+                TREINO DO DIA
               </Text>
-              <Text style={{ color: c.textSecondary }}>{phase.description}</Text>
-            </Text>
-          </View>
-
-          {/* ============================================================ */}
-          {/* DAY SELECTOR */}
-          {/* ============================================================ */}
-          <DaySelector
-            days={phase.days}
-            selectedDay={selectedDay}
-            phaseIndex={selectedPhase}
-            onSelectDay={handleSelectDay}
-          />
-
-          {/* ============================================================ */}
-          {/* DAY CARD */}
-          {/* ============================================================ */}
-          <View
-            style={[
-              styles.dayCard,
-              {
-                backgroundColor: withOpacity(day.color, 0.06),
-                borderColor: withOpacity(day.color, 0.13),
-              },
-            ]}
-          >
-            <View style={styles.dayCardRow}>
-              <View style={styles.dayCardLeft}>
-                <Text style={[styles.dayCardTitle, { color: c.textPrimary }]}>
-                  {day.label}
+              <Text style={[styles.workoutTitle, { color: c.textPrimary }]}>
+                {i18nText(workout.titulo, lang)}
+              </Text>
+              <View style={styles.workoutMeta}>
+                <Text style={[styles.metaItem, { color: c.textSecondary }]}>
+                  ⏱ {workout.duracao_minutos} min
                 </Text>
-                <Text style={[styles.dayCardFocus, { color: day.color }]}>
-                  {day.focus}
+                <Text style={[styles.metaItem, { color: c.accentYellow }]}>
+                  ⚡ +{workout.xp_recompensa} XP
                 </Text>
-                {day.needsPartner && (
-                  <View
-                    style={[
-                      styles.partnerBadge,
-                      {
-                        backgroundColor: '#1a140a',
-                        borderColor: withOpacity('#fbbf24', 0.16),
-                      },
-                    ]}
-                  >
-                    <Text style={styles.partnerBadgeText}>
-                      👥 Ótimo com parceiro
-                    </Text>
-                  </View>
-                )}
+                <Text style={[styles.metaItem, { color: c.textSecondary }]}>
+                  📍 {workout.local}
+                </Text>
               </View>
-              <View style={styles.dayCardRight}>
-                {day.duration !== '-' ? (
-                  <>
-                    <Text style={[styles.dayCardDuration, { color: day.color }]}>
-                      {day.duration.split(' ')[0]}
-                    </Text>
-                    <Text style={[styles.dayCardDurationUnit, { color: c.textDim }]}>
-                      minutos
-                    </Text>
-                  </>
-                ) : (
-                  <View
-                    style={[
-                      styles.restIcon,
-                      { backgroundColor: withOpacity(day.color, 0.1) },
-                    ]}
-                  >
-                    <Text style={styles.restIconText}>{day.icon}</Text>
-                  </View>
-                )}
+
+              {/* Frase de início */}
+              <View style={[styles.quoteBox, { backgroundColor: withOpacity(c.bgPrimary, 0.5) }]}>
+                <Text style={[styles.quoteText, { color: c.textSecondary }]}>
+                  {i18nText(workout.frase_inicio, lang)}
+                </Text>
               </View>
-            </View>
-          </View>
 
-          {/* ============================================================ */}
-          {/* WEEK MARK — per-day completion system */}
-          {/* ============================================================ */}
-          <WeekMark
-            phaseIndex={selectedPhase}
-            dayColor={day.color}
-            onTrainingComplete={handleTrainingComplete}
-          />
+              {/* Equipamentos */}
+              {workout.equipamentos.length > 0 && (
+                <View style={styles.equipRow}>
+                  <Text style={[styles.equipLabel, { color: c.textMuted }]}>🎒 </Text>
+                  <Text style={[styles.equipText, { color: c.textDim }]}>
+                    {workout.equipamentos.join(' · ')}
+                  </Text>
+                </View>
+              )}
+            </LinearGradient>
+          </AnimatedEntrance>
 
-          {/* ============================================================ */}
-          {/* EXERCISE LIST */}
-          {/* ============================================================ */}
-          {day.exercises.map((exercise, i) => (
-            <ExerciseCard
-              key={`${selectedPhase}-${selectedDay}-${i}`}
-              exercise={exercise}
-              dayColor={day.color}
-              isExpanded={expandedExercise === i}
-              onToggle={() => handleToggleExercise(i)}
-            />
+          {/* ---- Fases do Treino ---- */}
+          <Text style={[styles.sectionTitle, { color: c.textMuted }]}>
+            FASES DO TREINO
+          </Text>
+
+          {workout.fases.map((phase, phaseIdx) => (
+            <AnimatedEntrance key={phaseIdx} delay={240 + phaseIdx * 80}>
+              <PhaseCard
+                phase={phase}
+                index={phaseIdx}
+                isExpanded={expandedPhase === phaseIdx}
+                onToggle={() => handleTogglePhase(phaseIdx)}
+                colors={c}
+                lang={lang}
+              />
+            </AnimatedEntrance>
           ))}
 
-          {/* ============================================================ */}
-          {/* GOLDEN RULES */}
-          {/* ============================================================ */}
-          <View
-            style={[
-              styles.rulesCard,
-              {
-                backgroundColor: c.bgCard,
-                borderColor: c.borderDefault,
-              },
-            ]}
-          >
-            <Text style={[styles.rulesTitle, { color: '#fbbf24' }]}>
-              🏆 Regras de Ouro
-            </Text>
-            {GOLDEN_RULES.map((rule, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.ruleRow,
-                  {
-                    borderBottomColor:
-                      i < GOLDEN_RULES.length - 1 ? c.borderDefault : 'transparent',
-                  },
-                ]}
-              >
-                <Text style={[styles.ruleText, { color: c.textDim }]}>
-                  {rule}
-                </Text>
-              </View>
-            ))}
-          </View>
+          {/* ---- Botão Concluir ---- */}
+          <AnimatedEntrance delay={500}>
+            <TouchableOpacity
+              onPress={handleComplete}
+              disabled={completing || isCompleted || !allPhasesViewed}
+              activeOpacity={0.8}
+              style={[styles.completeBtn, {
+                backgroundColor: isCompleted
+                  ? withOpacity(c.accentGreen, 0.15)
+                  : allPhasesViewed
+                    ? c.accentGreen
+                    : withOpacity(c.textDim, 0.25),
+                opacity: completing ? 0.6 : 1,
+              }]}
+            >
+              <Text style={[styles.completeBtnText, {
+                color: isCompleted
+                  ? c.accentGreen
+                  : allPhasesViewed
+                    ? '#06100a'
+                    : c.textDim,
+              }]}>
+                {isCompleted
+                  ? '✅ Treino Concluído!'
+                  : completing
+                    ? 'Salvando...'
+                    : '🚀 Concluir Treino'}
+              </Text>
+            </TouchableOpacity>
+            {!allPhasesViewed && !isCompleted && (
+              <Text style={[styles.lockHint, { color: c.textDim }]}>
+                🔒 Veja todas as fases do treino para concluir ({openedPhases.size}/{totalPhases})
+              </Text>
+            )}
+          </AnimatedEntrance>
+
+          <View style={{ height: 40 }} />
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+// ==============================================================
+// Phase Card (expandível)
+// ==============================================================
+
+interface PhaseCardProps {
+  phase: WorkoutPhase;
+  index: number;
+  isExpanded: boolean;
+  onToggle: () => void;
+  colors: any;
+  lang: Lang;
+}
+
+function PhaseCard({ phase, index, isExpanded, onToggle, colors: c, lang }: PhaseCardProps) {
+  const phaseColor = getPhaseColor(phase.tipo);
+  const phaseIcon = getPhaseIcon(phase.tipo);
+
+  return (
+    <View style={[styles.phaseCard, {
+      backgroundColor: c.bgCard,
+      borderColor: withOpacity(phaseColor, 0.2),
+      borderLeftColor: phaseColor,
+    }]}>
+      <TouchableOpacity onPress={onToggle} activeOpacity={0.7} style={styles.phaseHeader}>
+        <View style={{ flex: 1 }}>
+          <View style={styles.phaseHeaderRow}>
+            <Text style={[styles.phaseIcon]}>{phaseIcon}</Text>
+            <Text style={[styles.phaseName, { color: phaseColor }]}>
+              {i18nText(phase.nome, lang)}
+            </Text>
+          </View>
+          <Text style={[styles.phaseMeta, { color: c.textDim }]}>
+            {phase.duracao_minutos} min · {phase.exercicios.length} exercícios
+          </Text>
+        </View>
+        <Text style={[styles.phaseChevron, { color: c.textDim }]}>
+          {isExpanded ? '▼' : '▶'}
+        </Text>
+      </TouchableOpacity>
+
+      {isExpanded && (
+        <View style={styles.exerciseList}>
+          {phase.exercicios.map((ex, exIdx) => (
+            <ExerciseItem key={exIdx} exercise={ex} index={exIdx} colors={c} lang={lang} phaseColor={phaseColor} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ==============================================================
+// Exercise Item
+// ==============================================================
+
+interface ExerciseItemProps {
+  exercise: WorkoutExercise;
+  index: number;
+  colors: any;
+  lang: Lang;
+  phaseColor: string;
+}
+
+function ExerciseItem({ exercise, index, colors: c, lang, phaseColor }: ExerciseItemProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  // Format duration/reps
+  let durationText = '';
+  if (exercise.duracao_segundos) {
+    const mins = Math.floor(exercise.duracao_segundos / 60);
+    const secs = exercise.duracao_segundos % 60;
+    durationText = mins > 0 ? `${mins}min${secs > 0 ? ` ${secs}s` : ''}` : `${secs}s`;
+  }
+
+  let repsText = '';
+  if (exercise.repeticoes) {
+    repsText = `${exercise.repeticoes}${exercise.series ? ` × ${exercise.series} séries` : ' reps'}`;
+  }
+
+  return (
+    <TouchableOpacity
+      onPress={() => setExpanded(!expanded)}
+      activeOpacity={0.7}
+      style={[styles.exerciseItem, {
+        backgroundColor: withOpacity(c.bgPrimary, 0.3),
+        borderColor: withOpacity(phaseColor, 0.1),
+      }]}
+    >
+      <View style={styles.exerciseRow}>
+        <Text style={[styles.exerciseNum, { color: phaseColor }]}>{index + 1}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.exerciseName, { color: c.textPrimary }]}>
+            {i18nText(exercise.nome, lang)}
+          </Text>
+          <View style={styles.exerciseMetaRow}>
+            {durationText ? (
+              <Text style={[styles.exerciseMetaItem, { color: c.textDim }]}>⏱ {durationText}</Text>
+            ) : null}
+            {repsText ? (
+              <Text style={[styles.exerciseMetaItem, { color: c.textDim }]}>🔄 {repsText}</Text>
+            ) : null}
+            {exercise.descanso_segundos ? (
+              <Text style={[styles.exerciseMetaItem, { color: c.textDim }]}>😮‍💨 {exercise.descanso_segundos}s desc.</Text>
+            ) : null}
+          </View>
+        </View>
+        <Text style={[styles.exerciseChevron, { color: c.textDim }]}>
+          {expanded ? '▼' : '▶'}
+        </Text>
+      </View>
+
+      {expanded && (
+        <View style={styles.exerciseDetails}>
+          <Text style={[styles.exerciseDesc, { color: c.textSecondary }]}>
+            {i18nText(exercise.descricao, lang)}
+          </Text>
+
+          {exercise.dica && (
+            <View style={[styles.tipBox, { backgroundColor: withOpacity('#2aff9e', 0.08) }]}>
+              <Text style={[styles.tipLabel, { color: '#2aff9e' }]}>💡 Dica</Text>
+              <Text style={[styles.tipText, { color: c.textSecondary }]}>
+                {i18nText(exercise.dica, lang)}
+              </Text>
+            </View>
+          )}
+
+          {exercise.erro_comum && (
+            <View style={[styles.tipBox, { backgroundColor: withOpacity('#f43f5e', 0.08) }]}>
+              <Text style={[styles.tipLabel, { color: '#f43f5e' }]}>⚠️ Erro comum</Text>
+              <Text style={[styles.tipText, { color: c.textSecondary }]}>
+                {i18nText(exercise.erro_comum, lang)}
+              </Text>
+            </View>
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+}
+
+// ==============================================================
+// Styles
+// ==============================================================
+
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingBottom: 100,
-  },
+  safe: { flex: 1 },
+  scroll: { paddingBottom: 40 },
+  content: { padding: 16, paddingTop: 50 },
 
   // Header
-  header: {
-    paddingTop: 52,
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1a2840',
-  },
-  topBadge: {
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  badgePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  badgePillText: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-  },
-  nameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  nameInfo: {},
-  greeting: {
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: -0.3,
-  },
-  greetingSub: {
-    fontSize: 12,
-    marginTop: 2,
-  },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  greeting: { fontSize: 20, fontWeight: '900' },
+  greetingSub: { fontSize: 12, marginTop: 2 },
 
-  // Content
-  content: {
-    padding: 14,
-  },
+  // Level card
+  levelCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 14, gap: 8 },
+  levelRow: { flexDirection: 'row', alignItems: 'center' },
+  levelLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase' },
+  levelName: { fontSize: 16, fontWeight: '900', marginTop: 2 },
+  levelStats: { alignItems: 'flex-end' },
+  levelXP: { fontSize: 13, fontWeight: '800' },
+  levelCount: { fontSize: 10, marginTop: 2 },
 
-  // Today card
-  todayCard: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 12,
-  },
-  todayCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  todayCardLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-  },
-  todayCardDay: {
-    fontSize: 10,
-  },
-  todayCardFocus: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  todayCardDuration: {
-    fontSize: 11,
-    marginTop: 3,
-  },
-  goTodayBtn: {
-    marginTop: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    alignSelf: 'flex-start',
-  },
-  goTodayBtnText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
+  // Workout card
+  workoutCard: { borderWidth: 1, borderRadius: 16, padding: 16, marginBottom: 16 },
+  workoutLabel: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 6 },
+  workoutTitle: { fontSize: 18, fontWeight: '900', marginBottom: 8 },
+  workoutMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 10 },
+  metaItem: { fontSize: 11, fontWeight: '600' },
+  quoteBox: { borderRadius: 10, padding: 10, marginBottom: 8 },
+  quoteText: { fontSize: 12, fontStyle: 'italic', lineHeight: 18 },
+  equipRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  equipLabel: { fontSize: 12 },
+  equipText: { fontSize: 10, flex: 1, lineHeight: 16 },
 
-  // Progress card
-  progressCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
-  },
-  progressCardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  progressNumbers: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    marginTop: 1,
-  },
-  progressBig: {
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  progressSmall: {
-    fontSize: 11,
-    fontWeight: '400',
-  },
-  progressRight: {
-    alignItems: 'flex-end',
-  },
-  progressRightLabel: {
-    fontSize: 10,
-  },
-  progressRightValue: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
+  // Section
+  sectionTitle: { fontSize: 9, fontWeight: '700', letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10, marginTop: 4 },
 
-  // Objective
-  objectiveCard: {
-    borderWidth: 1,
-    borderRadius: 9,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginBottom: 12,
-  },
-  objectiveText: {
-    fontSize: 11,
-    lineHeight: 18,
-  },
-  objectiveLabel: {
-    fontWeight: '700',
-  },
+  // Phase card
+  phaseCard: { borderWidth: 1, borderLeftWidth: 3, borderRadius: 12, marginBottom: 8, overflow: 'hidden' },
+  phaseHeader: { flexDirection: 'row', alignItems: 'center', padding: 12 },
+  phaseHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  phaseIcon: { fontSize: 16 },
+  phaseName: { fontSize: 14, fontWeight: '800' },
+  phaseMeta: { fontSize: 10, marginTop: 2, marginLeft: 22 },
+  phaseChevron: { fontSize: 10 },
 
-  // Day card
-  dayCard: {
-    borderWidth: 1,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 10,
-  },
-  dayCardRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  dayCardLeft: {
-    flex: 1,
-  },
-  dayCardTitle: {
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  dayCardFocus: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  partnerBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    marginTop: 5,
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  partnerBadgeText: {
-    fontSize: 9,
-    color: '#fbbf24',
-  },
-  dayCardRight: {
-    alignItems: 'flex-end',
-  },
-  dayCardDuration: {
-    fontSize: 24,
-    fontWeight: '900',
-    lineHeight: 28,
-  },
-  dayCardDurationUnit: {
-    fontSize: 10,
-  },
-  restIcon: {
-    borderRadius: 10,
-    padding: 7,
-  },
-  restIconText: {
-    fontSize: 20,
-  },
+  // Exercise list
+  exerciseList: { paddingHorizontal: 10, paddingBottom: 10, gap: 6 },
+  exerciseItem: { borderWidth: 1, borderRadius: 10, padding: 10 },
+  exerciseRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  exerciseNum: { fontSize: 13, fontWeight: '900', width: 20, textAlign: 'center', marginTop: 1 },
+  exerciseName: { fontSize: 13, fontWeight: '700' },
+  exerciseMetaRow: { flexDirection: 'row', gap: 10, marginTop: 3 },
+  exerciseMetaItem: { fontSize: 9 },
+  exerciseChevron: { fontSize: 9, marginTop: 3 },
 
-  // Rules
-  rulesCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 12,
-    marginTop: 6,
-  },
-  rulesTitle: {
-    fontSize: 11,
-    fontWeight: '800',
-    marginBottom: 9,
-  },
-  ruleRow: {
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-  },
-  ruleText: {
-    fontSize: 11,
-  },
+  // Exercise details
+  exerciseDetails: { marginTop: 8, marginLeft: 28, gap: 6 },
+  exerciseDesc: { fontSize: 12, lineHeight: 18 },
+  tipBox: { borderRadius: 8, padding: 8, gap: 3 },
+  tipLabel: { fontSize: 10, fontWeight: '800' },
+  tipText: { fontSize: 11, lineHeight: 16 },
+
+  // Complete button
+  completeBtn: { borderRadius: 14, padding: 16, alignItems: 'center', marginTop: 10 },
+  completeBtnText: { fontSize: 16, fontWeight: '900' },
+  lockHint: { fontSize: 11, textAlign: 'center', marginTop: 8, fontStyle: 'italic' },
+
+  // Empty state
+  emptyCard: { borderWidth: 1, borderRadius: 16, padding: 24, alignItems: 'center', gap: 8 },
+  emptyEmoji: { fontSize: 40 },
+  emptyTitle: { fontSize: 16, fontWeight: '900' },
+  emptyText: { fontSize: 12, textAlign: 'center', lineHeight: 18 },
 });

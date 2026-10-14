@@ -4,6 +4,8 @@
 
 import { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { useAppContext } from '../store/progress';
+import { withOpacity } from '../constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -22,6 +24,8 @@ interface ToastProps {
 }
 
 export default function Toast({ toast, onDismiss }: ToastProps) {
+  const { theme } = useAppContext();
+  const c = theme.colors;
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.8)).current;
@@ -68,16 +72,16 @@ export default function Toast({ toast, onDismiss }: ToastProps) {
   }, []);
 
   const bgColor = toast.type === 'phase'
-    ? '#1a0a2e'
+    ? withOpacity(c.accentPurple, theme.mode === 'pro' ? 0.12 : 0.08)
     : toast.type === 'celebration'
-      ? '#052e16'
-      : '#0d1422';
+      ? withOpacity(c.accentGreen, theme.mode === 'pro' ? 0.12 : 0.08)
+      : withOpacity(c.accentBlue, theme.mode === 'pro' ? 0.1 : 0.06);
 
   const borderColor = toast.type === 'phase'
-    ? '#a78bfa44'
+    ? withOpacity(c.accentPurple, 0.25)
     : toast.type === 'celebration'
-      ? '#4ade8044'
-      : (toast.color || '#4ade80') + '33';
+      ? withOpacity(c.accentGreen, 0.25)
+      : withOpacity(toast.color || c.accentGreen, 0.2);
 
   return (
     <Animated.View
@@ -92,7 +96,7 @@ export default function Toast({ toast, onDismiss }: ToastProps) {
       ]}
     >
       <Text style={styles.emoji}>{toast.emoji || '🔥'}</Text>
-      <Text style={[styles.message, { color: toast.color || '#4ade80' }]}>
+      <Text style={[styles.message, { color: toast.color || c.accentGreen }]}>
         {toast.message}
       </Text>
     </Animated.View>

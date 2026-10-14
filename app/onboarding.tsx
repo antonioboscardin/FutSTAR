@@ -1,7 +1,10 @@
-// FutStar — Onboarding (3 slides animados)
-// Exibido apenas na 1ª vez que o app é aberto
+// FutStar — Onboarding (4 slides interativos)
+// Slide 1: Boas-vindas
+// Slide 2: Objetivo do jogador (selecionável)
+// Slide 3: Sistema de treinos/progresso
+// Slide 4: Permissão de notificações
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,15 +18,14 @@ import { useRouter } from 'expo-router';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
-  withTiming,
   interpolate,
-  FadeIn,
-  FadeInDown,
   FadeInUp,
   type SharedValue,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { requestNotifPermission } from '../services/notifications';
+import { t } from '../i18n';
 
 const { width, height } = Dimensions.get('window');
 
@@ -34,42 +36,72 @@ interface Slide {
   subtitle: string;
   gradient: [string, string];
   accentColor: string;
+  type: 'info' | 'objective' | 'notif';
 }
 
 const SLIDES: Slide[] = [
   {
     id: '1',
     emoji: '⚽',
-    title: 'Treinos profissionais\nno seu bolso',
-    subtitle: 'Exercícios detalhados criados para te\ntransformar no jogador que você sonha ser.',
-    gradient: ['#052e16', '#060b14'],
-    accentColor: '#4ade80',
+    title: t('onboarding_s1_title'),
+    subtitle: t('onboarding_s1_sub'),
+    gradient: ['#0b2218', '#06100a'],
+    accentColor: '#2aff9e',
+    type: 'info',
   },
   {
     id: '2',
-    emoji: '🏆',
-    title: 'Evolua na\nsua posição',
-    subtitle: 'Treinos específicos para cada posição.\nPonta, centroavante, meia — você escolhe.',
-    gradient: ['#1e1b4b', '#060b14'],
+    emoji: '🎯',
+    title: t('onboarding_s2_title'),
+    subtitle: t('onboarding_s2_sub'),
+    gradient: ['#1e1b4b', '#06100a'],
     accentColor: '#a78bfa',
+    type: 'objective',
   },
   {
     id: '3',
-    emoji: '🌍',
-    title: 'Compete com jogadores\ndo mundo todo',
-    subtitle: 'Ranking, conquistas e XP.\nSua evolução nunca mais será invisível.',
-    gradient: ['#431407', '#060b14'],
+    emoji: '🏆',
+    title: t('onboarding_s3_title'),
+    subtitle: t('onboarding_s3_sub'),
+    gradient: ['#431407', '#06100a'],
     accentColor: '#fb923c',
+    type: 'info',
+  },
+  {
+    id: '4',
+    emoji: '🔔',
+    title: t('onboarding_s4_title'),
+    subtitle: t('onboarding_s4_sub'),
+    gradient: ['#0c4a6e', '#06100a'],
+    accentColor: '#38bdf8',
+    type: 'notif',
   },
 ];
+
+const OBJECTIVES = [
+  { key: 'tecnica', emoji: '🎯', labelKey: 'onboarding_obj_tecnica' },
+  { key: 'velocidade', emoji: '⚡', labelKey: 'onboarding_obj_velocidade' },
+  { key: 'forca', emoji: '💪', labelKey: 'onboarding_obj_forca' },
+  { key: 'coletivo', emoji: '🤝', labelKey: 'onboarding_obj_coletivo' },
+];
+
+// ---- Slide Item ----
 
 interface SlideItemProps {
   item: Slide;
   index: number;
   scrollX: SharedValue<number>;
+  selectedObjective: string | null;
+  onSelectObjective: (key: string) => void;
+  notifGranted: boolean | null;
+  onRequestNotif: () => void;
 }
 
-function SlideItem({ item, index, scrollX }: SlideItemProps) {
+function SlideItem({
+  item, index, scrollX,
+  selectedObjective, onSelectObjective,
+  notifGranted, onRequestNotif,
+}: SlideItemProps) {
   const animStyle = useAnimatedStyle(() => {
     const inputRange = [
       (index - 1) * width,
@@ -109,6 +141,71 @@ function SlideItem({ item, index, scrollX }: SlideItemProps) {
           {item.subtitle}
         </Text>
 
+        {/* Objective selector (slide 2) */}
+        {item.type === 'objective' && (
+          <View style={styles.objectiveGrid}>
+            {OBJECTIVES.map(obj => {
+              const isSelected = selectedObjective === obj.key;
+              return (
+                <TouchableOpacity
+                  key={obj.key}
+                  onPress={() => onSelectObjective(obj.key)}
+                  activeOpacity={0.7}
+                  style={[
+                    styles.objectiveBtn,
+                    {
+                      backgroundColor: isSelected
+                        ? item.accentColor + '20'
+                        : '#0d1f17',
+                      borderColor: isSelected
+                        ? item.accentColor
+                        : '#1a2840',
+                    },
+                  ]}
+                >
+                  <Text style={styles.objectiveEmoji}>{obj.emoji}</Text>
+                  <Text style={[
+                    styles.objectiveLabel,
+                    {
+                      color: isSelected ? item.accentColor : '#94a3b8',
+                      fontWeight: isSelected ? '800' : '500',
+                    },
+                  ]}>
+                    {t(obj.labelKey)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        )}
+
+        {/* Notification request (slide 4) */}
+        {item.type === 'notif' && (
+          <View style={styles.notifSection}>
+            {notifGranted === null ? (
+              <TouchableOpacity
+                onPress={onRequestNotif}
+                activeOpacity={0.8}
+                style={[styles.notifBtn, { backgroundColor: item.accentColor }]}
+              >
+                <Text style={styles.notifBtnText}>{t('onboarding_notif_allow')}</Text>
+              </TouchableOpacity>
+            ) : notifGranted ? (
+              <View style={[styles.notifStatus, { borderColor: '#2aff9e' + '44' }]}>
+                <Text style={[styles.notifStatusText, { color: '#2aff9e' }]}>
+                  ✅ {t('onboarding_notif_granted')}
+                </Text>
+              </View>
+            ) : (
+              <View style={[styles.notifStatus, { borderColor: '#fb923c' + '44' }]}>
+                <Text style={[styles.notifStatusText, { color: '#fb923c' }]}>
+                  {t('onboarding_notif_denied')}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {/* Decorative accent line */}
         <View
           style={[styles.accentLine, { backgroundColor: item.accentColor + '33' }]}
@@ -122,11 +219,15 @@ function SlideItem({ item, index, scrollX }: SlideItemProps) {
   );
 }
 
+// ---- Main Screen ----
+
 export default function OnboardingScreen() {
   const router = useRouter();
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollX = useSharedValue(0);
   const flatListRef = useRef<FlatList>(null);
+  const [selectedObjective, setSelectedObjective] = useState<string | null>(null);
+  const [notifGranted, setNotifGranted] = useState<boolean | null>(null);
 
   const isLastSlide = currentIndex === SLIDES.length - 1;
 
@@ -153,16 +254,20 @@ export default function OnboardingScreen() {
     }
   };
 
-  const handleStart = () => {
+  const handleStart = async () => {
+    // Save objective if selected
+    if (selectedObjective) {
+      try {
+        await AsyncStorage.setItem('futstar_onboarding_objective', selectedObjective);
+      } catch {}
+    }
     router.replace('/cadastro' as any);
   };
 
-  // Button animated style
-  const buttonAnimStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ scale: withSpring(1) }],
-    };
-  });
+  const handleRequestNotif = async () => {
+    const granted = await requestNotifPermission();
+    setNotifGranted(granted);
+  };
 
   return (
     <View style={styles.container}>
@@ -170,7 +275,15 @@ export default function OnboardingScreen() {
         ref={flatListRef}
         data={SLIDES}
         renderItem={({ item, index }) => (
-          <SlideItem item={item} index={index} scrollX={scrollX} />
+          <SlideItem
+            item={item}
+            index={index}
+            scrollX={scrollX}
+            selectedObjective={selectedObjective}
+            onSelectObjective={setSelectedObjective}
+            notifGranted={notifGranted}
+            onRequestNotif={handleRequestNotif}
+          />
         )}
         keyExtractor={(item) => item.id}
         horizontal
@@ -197,7 +310,7 @@ export default function OnboardingScreen() {
             style={styles.skipButton}
             activeOpacity={0.6}
           >
-            <Text style={styles.skipText}>Pular</Text>
+            <Text style={styles.skipText}>{t('onboarding_skip')}</Text>
           </TouchableOpacity>
         )}
 
@@ -231,7 +344,7 @@ export default function OnboardingScreen() {
           <LinearGradient
             colors={
               isLastSlide
-                ? ['#4ade80', '#22c55e']
+                ? ['#01875f', '#2aff9e']
                 : [SLIDES[currentIndex].accentColor, SLIDES[currentIndex].accentColor + 'cc']
             }
             style={styles.nextButton}
@@ -239,7 +352,7 @@ export default function OnboardingScreen() {
             end={{ x: 1, y: 1 }}
           >
             <Text style={styles.nextButtonText}>
-              {isLastSlide ? 'Começar agora 🚀' : 'Próximo →'}
+              {isLastSlide ? t('onboarding_start') : t('onboarding_next')}
             </Text>
           </LinearGradient>
         </TouchableOpacity>
@@ -254,7 +367,7 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#060b14',
+    backgroundColor: '#06100a',
   },
   slideContainer: {
     width,
@@ -279,7 +392,7 @@ const styles = StyleSheet.create({
     height: 120,
     borderRadius: 60,
     borderWidth: 2,
-    backgroundColor: '#0d1422',
+    backgroundColor: '#0d1f17',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -300,6 +413,59 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginBottom: 20,
   },
+  // Objective selector
+  objectiveGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 16,
+    paddingHorizontal: 8,
+  },
+  objectiveBtn: {
+    borderWidth: 1.5,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minWidth: '42%',
+    justifyContent: 'center',
+  },
+  objectiveEmoji: {
+    fontSize: 18,
+  },
+  objectiveLabel: {
+    fontSize: 13,
+  },
+  // Notification section
+  notifSection: {
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  notifBtn: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+  },
+  notifBtnText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#06100a',
+  },
+  notifStatus: {
+    borderWidth: 1,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+  },
+  notifStatusText: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  // Accent line
   accentLine: {
     width: 60,
     height: 3,
@@ -355,7 +521,7 @@ const styles = StyleSheet.create({
   nextButtonText: {
     fontSize: 16,
     fontWeight: '900',
-    color: '#060b14',
+    color: '#06100a',
     letterSpacing: 0.3,
   },
   brandingText: {
