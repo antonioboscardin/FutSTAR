@@ -1,0 +1,19 @@
+{
+  "project_info": {
+    "project_number": "1085465520463",
+    "project_id": "futstar-prod",
+    "storage_bucket": "futstar-prod.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1085465520463:android:c9abbe623bbe1dc877fd3a",
+        "android_client_info": {
+          "package_name": "com.antonioboscardin.futstar"
+        }
+      },
+      "api_key": [{ "current_key": "AIzaSyDDGlLa4IXxa0f0rPdWNC-VVHY7GKt1BWE" }],
+      "configuration_version": "1"
+    }
+  ]
+}
