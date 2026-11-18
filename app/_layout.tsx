@@ -3,10 +3,11 @@
 // Gerencia splash screen, carregamento e navegação condicional
 
 import { useEffect } from 'react';
+import React from 'react';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 import * as Sentry from '@sentry/react-native';
 
@@ -28,14 +29,45 @@ export {
   ErrorBoundary,
 } from 'expo-router';
 
+// ── Debug Error Boundary (remover após identificar o crash) ──
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: string }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: '' };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error: error.message + '\n' + (error.stack ?? '') };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <View style={{ flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#000' }}>
+          <Text style={{ color: 'red', fontSize: 16, fontWeight: 'bold' }}>CRASH:</Text>
+          <ScrollView>
+            <Text style={{ color: 'white', fontSize: 12, marginTop: 10 }}>
+              {this.state.error}
+            </Text>
+          </ScrollView>
+        </View>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Previne auto-hide do splash antes de carregar dados
 SplashScreen.preventAutoHideAsync();
 
 function RootLayout() {
   return (
-    <AppProvider>
-      <RootNavigator />
-    </AppProvider>
+    <ErrorBoundary>
+      <AppProvider>
+        <RootNavigator />
+      </AppProvider>
+    </ErrorBoundary>
   );
 }
 
