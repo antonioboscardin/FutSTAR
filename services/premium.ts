@@ -103,6 +103,12 @@ export async function initPremium(): Promise<void> {
 
   // 2. Tentar inicializar RevenueCat
   try {
+    if (!REVENUECAT_API_KEY) {
+      console.warn('[RevenueCat] Key not found — skipping initialization');
+      _isPremium = await getCachedPremiumStatus();
+      _isInitialized = true;
+      return;
+    }
     const Purchases = require('react-native-purchases').default;
     await Purchases.configure({ apiKey: REVENUECAT_API_KEY });
     _revenueCatAvailable = true;
