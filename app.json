@@ -61,23 +61,20 @@
           }
         }
       ],
-      "expo-font",
-      [
-        "@sentry/react-native",
-        {
-          "url": "https://sentry.io/",
-          "organization": "futstar",
-          "project": "futstar-app",
-          "disableAutoUpload": true
-        }
-      ],
       [
         "react-native-google-mobile-ads",
         {
           "androidAppId": "ca-app-pub-9242849123042157~5228127479",
-          "iosAppId": "ca-app-pub-3940256099942544~3347511713"
+          "iosAppId": "ca-app-pub-9242849123042157~5228127479"
         }
-      ]
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "disableAutoUpload": true
+        }
+      ],
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
