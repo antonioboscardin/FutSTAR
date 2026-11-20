@@ -47,12 +47,6 @@
           "androidAppId": "ca-app-pub-9242849123042157~5228127479",
           "iosAppId": "ca-app-pub-9242849123042157~5228127479"
         }
-      ],
-      [
-        "@sentry/react-native/expo",
-        {
-          "disableAutoUpload": true
-        }
       ]
     ],
     "experiments": {
